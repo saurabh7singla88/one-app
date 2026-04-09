@@ -26,6 +26,30 @@ function getResourcePath(...parts) {
 
 const userDataPath = app.getPath('userData');
 
+// ─── Migrate data from old "the-manager-desktop" location if this is first launch
+try {
+  const oldPath = path.join(path.dirname(userDataPath), 'the-manager-desktop');
+  const oldDb = path.join(oldPath, 'app.db');
+  const newDb = path.join(userDataPath, 'app.db');
+  if (oldPath !== userDataPath && existsSync(oldDb)) {
+    const fs = require('fs');
+    const oldSize = fs.statSync(oldDb).size;
+    const newSize = existsSync(newDb) ? fs.statSync(newDb).size : 0;
+    // Migrate if new DB doesn't exist, or is smaller (likely an empty auto-created DB)
+    if (!existsSync(newDb) || (oldSize > newSize)) {
+      mkdirSync(userDataPath, { recursive: true });
+      fs.copyFileSync(oldDb, newDb);
+      for (const f of ['app.db-journal', 'app.db-wal', 'turso.json', 'jwt-secret']) {
+        if (existsSync(path.join(oldPath, f)))
+          fs.copyFileSync(path.join(oldPath, f), path.join(userDataPath, f));
+      }
+      console.log('Migrated data from "the-manager-desktop" to new location');
+    }
+  }
+} catch (e) {
+  console.error('Data migration from old location failed (non-fatal):', e.message);
+}
+
 process.env.ELECTRON         = 'true';
 process.env.DATABASE_URL     = `file:${path.join(userDataPath, 'app.db')}`;
 process.env.TURSO_CONFIG_DIR = userDataPath;
@@ -107,7 +131,7 @@ function createWindow() {
     height: 900,
     minWidth: 900,
     minHeight: 600,
-    title: 'The Manager',
+    title: 'One',
     show: false,               // avoid white flash — show once ready-to-show
     backgroundColor: '#f8fafc', // match app background so flash is invisible
     webPreferences: {
@@ -179,7 +203,7 @@ app.whenReady().then(async () => {
       mkdirSync(userDataPath, { recursive: true });
       const logPath = path.join(userDataPath, 'error.log');
       writeFileSync(logPath, `[${new Date().toISOString()}]\n${err?.stack || String(err)}\n`);
-      dialog.showErrorBox('The Manager — startup error', `${err?.message || String(err)}\n\nDetails written to:\n${logPath}`);
+      dialog.showErrorBox('One — startup error', `${err?.message || String(err)}\n\nDetails written to:\n${logPath}`);
     } catch (_) { /* ignore secondary errors */ }
     app.quit();
   }

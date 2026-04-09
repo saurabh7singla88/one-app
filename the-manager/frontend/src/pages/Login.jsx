@@ -213,7 +213,7 @@ export default function Login() {
             <AccountTree sx={{ fontSize: 30, color: '#fff' }} />
           </Box>
           <Typography variant="h3" fontWeight={700} gutterBottom>
-            The Manager
+            One
           </Typography>
           <Typography variant="body1" sx={{ opacity: 0.8, lineHeight: 1.7 }}>
             Track strategic initiatives, manage priorities, and visualise your work — all in one place.

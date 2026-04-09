@@ -132,7 +132,7 @@ export default function Layout() {
             variant="body1" fontWeight={700}
             sx={{ color: '#ffffff', letterSpacing: '-0.01em', ml: 1.25, whiteSpace: 'nowrap' }}
           >
-            The Manager
+            One
           </Typography>
         )}
       </Box>
@@ -322,7 +322,7 @@ export default function Layout() {
           <IconButton color="inherit" edge="start" onClick={() => setMobileOpen(true)} sx={{ mr: 1 }}>
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" fontWeight={700}>The Manager</Typography>
+          <Typography variant="h6" fontWeight={700}>One</Typography>
         </Toolbar>
       </AppBar>
 

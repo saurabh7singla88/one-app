@@ -501,7 +501,7 @@ function GmailSection() {
               </Button>
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              <strong>2. Generate an App Password</strong> — create one named "The Manager" and copy the 16-character code.{' '}
+              <strong>2. Generate an App Password</strong> — create one named "One" and copy the 16-character code.{' '}
               <Button
                 size="small" variant="text" endIcon={<Launch fontSize="small" />}
                 href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener"
@@ -724,9 +724,9 @@ function TursoSection() {
         <Typography variant="caption" color="text.secondary">
           Create a free database at{' '}
           <Link href="https://turso.tech" target="_blank" rel="noreferrer">turso.tech</Link>, then run:
-          {' '}<code>turso db create the-manager</code>{' '}and{' '}
-          <code>turso db tokens create the-manager</code>
-          <br />The database URL looks like: <code>libsql://the-manager-yourname.turso.io</code>
+          {' '}<code>turso db create one</code>{' '}and{' '}
+          <code>turso db tokens create one</code>
+          <br />The database URL looks like: <code>libsql://one-yourname.turso.io</code>
         </Typography>
       </Alert>
 

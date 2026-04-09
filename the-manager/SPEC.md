@@ -878,7 +878,7 @@ No database server needed. Run `npx prisma migrate dev` once after cloning — i
 
 Add an `electron/` package alongside `backend/` and `frontend/`. The Electron **main process**:
 
-1. Resolves the user-data directory (`%APPDATA%\TheManager` on Windows, `~/Library/Application Support/TheManager` on Mac) and sets all required env vars in-process before anything else (`DATABASE_URL`, `JWT_SECRET`, `PORT`, `NODE_ENV`, `ALLOWED_ORIGINS`).
+1. Resolves the user-data directory (`%APPDATA%\One` on Windows, `~/Library/Application Support/One` on Mac) and sets all required env vars in-process before anything else (`DATABASE_URL`, `JWT_SECRET`, `PORT`, `NODE_ENV`, `ALLOWED_ORIGINS`).
 2. Runs `prisma migrate deploy` via `child_process.spawnSync` against the packaged Prisma CLI to apply any pending migrations on first launch or after an update.
 3. Dynamically imports the Express server (`await import('../backend/src/server.js')`) so the backend runs **in-process** — no child process, no IPC overhead.
 4. Once the server emits ready, opens a `BrowserWindow` that loads `frontend/dist/index.html` using a `file://` URL.
@@ -886,7 +886,7 @@ Add an `electron/` package alongside `backend/` and `frontend/`. The Electron **
 #### File / folder structure
 
 ```
-the-manager/
+one/
   electron/
     package.json          ← electron, electron-builder deps + build config
     main.js               ← Electron main process entry point
@@ -948,7 +948,7 @@ app.whenReady().then(() => {
 
 ```json
 {
-  "name": "the-manager",
+  "name": "one",
   "version": "1.0.0",
   "main": "main.js",
   "type": "module",
@@ -958,8 +958,8 @@ app.whenReady().then(() => {
     "build": "npm run build:frontend && electron-builder --win --mac"
   },
   "build": {
-    "appId": "com.themanager.app",
-    "productName": "The Manager",
+    "appId": "com.one.app",
+    "productName": "One",
     "files": [
       "main.js",
       "preload.js",
@@ -1017,14 +1017,14 @@ cd electron && npm run build
 These steps apply to a user who has downloaded and installed the `.exe` (Windows) or `.dmg` (Mac) for the first time.
 
 **Step 1 — Install the app**
-- Windows: Run the `TheManager-Setup-x.x.x.exe` installer. It installs to `%LOCALAPPDATA%\Programs\TheManager` by default.
-- Mac: Open the `.dmg`, drag *The Manager* to your Applications folder.
+- Windows: Run the `One-Setup-x.x.x.exe` installer. It installs to `%LOCALAPPDATA%\Programs\One` by default.
+- Mac: Open the `.dmg`, drag *One* to your Applications folder.
 
 **Step 2 — Launch the app**
 - Double-click the app icon.
 - On first launch, the app automatically creates the local SQLite database at:
-  - Windows: `%APPDATA%\TheManager\app.db`
-  - Mac: `~/Library/Application Support/TheManager/app.db`
+  - Windows: `%APPDATA%\One\app.db`
+  - Mac: `~/Library/Application Support/One/app.db`
 - No internet connection is required for this step.
 
 **Step 3 — Register your account**

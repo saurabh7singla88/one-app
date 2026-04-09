@@ -55,7 +55,7 @@ export default function Register() {
           >
             <AccountTree sx={{ fontSize: 30, color: '#fff' }} />
           </Box>
-          <Typography variant="h3" fontWeight={700} gutterBottom>The Manager</Typography>
+          <Typography variant="h3" fontWeight={700} gutterBottom>One</Typography>
           <Typography variant="body1" sx={{ opacity: 0.8, lineHeight: 1.7 }}>
             Your strategic command centre for initiatives, tasks, and priorities.
           </Typography>
