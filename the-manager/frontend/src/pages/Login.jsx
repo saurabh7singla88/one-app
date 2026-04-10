@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Box, TextField, Button, Typography, Alert, Paper, InputAdornment, IconButton, CircularProgress,
-  Dialog, DialogTitle, DialogContent, DialogActions, Divider,
+  Dialog, DialogTitle, DialogContent, DialogActions, Divider, FormControlLabel, Checkbox,
 } from '@mui/material';
 import { Email, Lock, Visibility, VisibilityOff, AccountTree, ContentCopy, CheckCircle } from '@mui/icons-material';
 import { login } from '../features/auth/authSlice';
@@ -170,11 +170,28 @@ export default function Login() {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('one_saved_credentials');
+    if (saved) {
+      try {
+        const { email, password } = JSON.parse(saved);
+        setFormData({ email: email || '', password: password || '' });
+        setRememberMe(true);
+      } catch {}
+    }
+  }, []);
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (rememberMe) {
+      localStorage.setItem('one_saved_credentials', JSON.stringify({ email: formData.email, password: formData.password }));
+    } else {
+      localStorage.removeItem('one_saved_credentials');
+    }
     const result = await dispatch(login(formData));
     if (login.fulfilled.match(result)) navigate('/');
   };
@@ -278,6 +295,17 @@ export default function Login() {
                   </InputAdornment>
                 )
               }}
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={rememberMe}
+                  onChange={e => setRememberMe(e.target.checked)}
+                  size="small"
+                />
+              }
+              label={<Typography variant="body2">Remember me</Typography>}
+              sx={{ mb: 1.5 }}
             />
             <Button
               type="submit"
