@@ -54,31 +54,38 @@ async function callOllama(settings, systemPrompt, userPrompt) {
 }
 
 // ─── Provider: OpenAI / OpenAI-compatible (LM Studio, Together AI, etc.) ──────
-async function callOpenAI(settings, systemPrompt, userPrompt) {
-  if (!settings.ai_openai_api_key) return null;
+// Returns { text: string|null, error: string|null }.
+// Set jsonMode=false for free-text (non-JSON) responses (e.g. rephrase, summaries).
+async function callOpenAI(settings, systemPrompt, userPrompt, jsonMode = true) {
+  if (!settings.ai_openai_api_key) return { text: null, error: 'OpenAI API key not configured. Add it in Setup → AI Settings.' };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT);
   try {
     const base = (settings.ai_openai_base_url || 'https://api.openai.com').replace(/\/$/, '');
+    const bodyObj = {
+      model: settings.ai_openai_model, temperature: 0.1,
+      messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+    };
+    if (jsonMode) bodyObj.response_format = { type: 'json_object' };
     const res = await fetch(`${base}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.ai_openai_api_key}` },
       signal: controller.signal,
-      body: JSON.stringify({
-        model: settings.ai_openai_model, temperature: 0.1,
-        response_format: { type: 'json_object' },
-        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-      }),
+      body: JSON.stringify(bodyObj),
     });
     if (!res.ok) {
-      logger.error('OpenAI non-OK response', { status: res.status, model: settings.ai_openai_model, base: settings.ai_openai_base_url });
-      return null;
+      let detail = `HTTP ${res.status}`;
+      try { const errBody = await res.json(); detail = errBody.error?.message || errBody.error || detail; } catch {}
+      logger.error('OpenAI non-OK response', { status: res.status, detail, model: settings.ai_openai_model, base: settings.ai_openai_base_url });
+      return { text: null, error: `OpenAI error: ${detail}` };
     }
     const data = await res.json();
-    return data.choices?.[0]?.message?.content?.trim() || null;
+    const text = data.choices?.[0]?.message?.content?.trim() || null;
+    return { text, error: text ? null : 'OpenAI returned an empty response.' };
   } catch (e) {
     logger.error('OpenAI call failed', e);
-    return null;
+    const msg = e.name === 'AbortError' ? 'OpenAI request timed out.' : `OpenAI call failed: ${e.message}`;
+    return { text: null, error: msg };
   } finally { clearTimeout(timer); }
 }
 
@@ -210,9 +217,11 @@ Be generous: if ANY urgency is implied or suggested, score it above 30.`;
 
   let rawText = null;
   if (provider === 'ollama') rawText = await callOllama(settings, systemPrompt, userPrompt);
-  else if (provider === 'openai') rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-  else if (provider === 'openai_compatible') rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-  else if (provider === 'gemini') {
+  else if (provider === 'openai' || provider === 'openai_compatible') {
+    const r = await callOpenAI(settings, systemPrompt, userPrompt, true);
+    rawText = r.text || null;
+    if (r.error) logger.warn('OpenAI urgency analysis failed', { error: r.error });
+  } else if (provider === 'gemini') {
     const r = await callGemini(settings, systemPrompt, userPrompt, null);
     rawText = r.text || null;
     if (r.error) logger.warn('Gemini urgency analysis failed', { error: r.error });
@@ -535,9 +544,11 @@ ${body}`;
   let rawText = null;
   let llmError = null;
   if (provider === 'ollama')            rawText = await callOllama(settings, systemPrompt, userPrompt);
-  else if (provider === 'openai')       rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-  else if (provider === 'openai_compatible') rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-  else if (provider === 'gemini') {
+  else if (provider === 'openai' || provider === 'openai_compatible') {
+    const r = await callOpenAI(settings, systemPrompt, userPrompt, true);
+    if (r.error) llmError = r.error;
+    else rawText = r.text;
+  } else if (provider === 'gemini') {
     const result = await callGemini(settings, systemPrompt, userPrompt, ACTION_ITEMS_GEMINI_SCHEMA);
     if (result.error) llmError = result.error;
     else rawText = result.text;
@@ -633,8 +644,11 @@ Be concise and factual. Omit sections that have no relevant content.`;
     let rawText = null;
     let llmError = null;
     if (provider === 'ollama') rawText = await callOllama(settings, systemPrompt, userPrompt);
-    else if (provider === 'openai' || provider === 'openai_compatible') rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-    else if (provider === 'gemini') {
+    else if (provider === 'openai' || provider === 'openai_compatible') {
+      const r = await callOpenAI(settings, systemPrompt, userPrompt, false);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
+    } else if (provider === 'gemini') {
       const r = await callGemini(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
@@ -675,8 +689,11 @@ router.post('/rephrase', async (req, res, next) => {
     let llmError = null;
 
     if (provider === 'ollama') rawText = await callOllama(settings, systemPrompt, userPrompt);
-    else if (provider === 'openai' || provider === 'openai_compatible') rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-    else if (provider === 'gemini') {
+    else if (provider === 'openai' || provider === 'openai_compatible') {
+      const r = await callOpenAI(settings, systemPrompt, userPrompt, false);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
+    } else if (provider === 'gemini') {
       // Give rephrase calls a longer per-attempt timeout (60 s) so retries have room to succeed
       const r = await callGemini(settings, systemPrompt, userPrompt, false, 60_000);
       if (r.error) llmError = r.error;
@@ -823,8 +840,11 @@ ${metrics}`;
 
     let rawText = null, llmError = null;
     if (provider === 'ollama') rawText = await callOllama(settings, systemPrompt, userPrompt);
-    else if (provider === 'openai' || provider === 'openai_compatible') rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-    else if (provider === 'gemini') {
+    else if (provider === 'openai' || provider === 'openai_compatible') {
+      const r = await callOpenAI(settings, systemPrompt, userPrompt, false);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
+    } else if (provider === 'gemini') {
       const r = await callGemini(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
@@ -1062,8 +1082,11 @@ router.post('/summarize-item', async (req, res, next) => {
     let rawText = null;
     let llmError = null;
     if (provider === 'ollama') rawText = await callOllama(settings, systemPrompt, userPrompt);
-    else if (provider === 'openai' || provider === 'openai_compatible') rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-    else if (provider === 'gemini') {
+    else if (provider === 'openai' || provider === 'openai_compatible') {
+      const r = await callOpenAI(settings, systemPrompt, userPrompt, false);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
+    } else if (provider === 'gemini') {
       const r = await callGemini(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
@@ -1134,8 +1157,11 @@ Be concise and factual. Only include sections with relevant content.`;
     let rawText = null;
     let llmError = null;
     if (provider === 'ollama') rawText = await callOllama(settings, systemPrompt, userPrompt);
-    else if (provider === 'openai' || provider === 'openai_compatible') rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-    else if (provider === 'gemini') {
+    else if (provider === 'openai' || provider === 'openai_compatible') {
+      const r = await callOpenAI(settings, systemPrompt, userPrompt, false);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
+    } else if (provider === 'gemini') {
       const r = await callGemini(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
@@ -1196,8 +1222,11 @@ router.post('/action-on-items', async (req, res, next) => {
     let rawText = null;
     let llmError = null;
     if (provider === 'ollama') rawText = await callOllama(settings, systemPrompt, userPrompt);
-    else if (provider === 'openai' || provider === 'openai_compatible') rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-    else if (provider === 'gemini') {
+    else if (provider === 'openai' || provider === 'openai_compatible') {
+      const r = await callOpenAI(settings, systemPrompt, userPrompt, false);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
+    } else if (provider === 'gemini') {
       const r = await callGemini(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
@@ -1305,9 +1334,14 @@ GUIDELINES:
           if (r.ok) {
             const d = await r.json();
             rawText = d.choices?.[0]?.message?.content?.trim() || null;
-          } else { logger.error('OpenAI chat non-OK', { status: r.status }); }
+          } else {
+            let detail = `HTTP ${r.status}`;
+            try { const errBody = await r.json(); detail = errBody.error?.message || errBody.error || detail; } catch {}
+            logger.error('OpenAI chat non-OK', { status: r.status, detail });
+            llmError = `OpenAI error: ${detail}`;
+          }
         } finally { clearTimeout(timer); }
-      }
+      } else { llmError = 'OpenAI API key not configured. Add it in Setup → AI Settings.'; }
     } else if (provider === 'gemini') {
       // Simulate multi-turn by prepending history into the prompt
       const historyBlock = history.length > 0

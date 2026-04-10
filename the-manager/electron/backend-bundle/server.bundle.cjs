@@ -101415,32 +101415,41 @@ async function callOllama(settings, systemPrompt, userPrompt) {
     clearTimeout(timer);
   }
 }
-async function callOpenAI(settings, systemPrompt, userPrompt) {
-  if (!settings.ai_openai_api_key) return null;
+async function callOpenAI(settings, systemPrompt, userPrompt, jsonMode = true) {
+  if (!settings.ai_openai_api_key) return { text: null, error: "OpenAI API key not configured. Add it in Setup \u2192 AI Settings." };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT);
   try {
     const base2 = (settings.ai_openai_base_url || "https://api.openai.com").replace(/\/$/, "");
+    const bodyObj = {
+      model: settings.ai_openai_model,
+      temperature: 0.1,
+      messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }]
+    };
+    if (jsonMode) bodyObj.response_format = { type: "json_object" };
     const res = await fetch(`${base2}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${settings.ai_openai_api_key}` },
       signal: controller.signal,
-      body: JSON.stringify({
-        model: settings.ai_openai_model,
-        temperature: 0.1,
-        response_format: { type: "json_object" },
-        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }]
-      })
+      body: JSON.stringify(bodyObj)
     });
     if (!res.ok) {
-      logger_default.error("OpenAI non-OK response", { status: res.status, model: settings.ai_openai_model, base: settings.ai_openai_base_url });
-      return null;
+      let detail = `HTTP ${res.status}`;
+      try {
+        const errBody = await res.json();
+        detail = errBody.error?.message || errBody.error || detail;
+      } catch {
+      }
+      logger_default.error("OpenAI non-OK response", { status: res.status, detail, model: settings.ai_openai_model, base: settings.ai_openai_base_url });
+      return { text: null, error: `OpenAI error: ${detail}` };
     }
     const data = await res.json();
-    return data.choices?.[0]?.message?.content?.trim() || null;
+    const text = data.choices?.[0]?.message?.content?.trim() || null;
+    return { text, error: text ? null : "OpenAI returned an empty response." };
   } catch (e) {
     logger_default.error("OpenAI call failed", e);
-    return null;
+    const msg = e.name === "AbortError" ? "OpenAI request timed out." : `OpenAI call failed: ${e.message}`;
+    return { text: null, error: msg };
   } finally {
     clearTimeout(timer);
   }
@@ -101557,9 +101566,11 @@ Be generous: if ANY urgency is implied or suggested, score it above 30.`;
 ${JSON.stringify(payload, null, 2)}`;
   let rawText = null;
   if (provider === "ollama") rawText = await callOllama(settings, systemPrompt, userPrompt);
-  else if (provider === "openai") rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-  else if (provider === "openai_compatible") rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-  else if (provider === "gemini") {
+  else if (provider === "openai" || provider === "openai_compatible") {
+    const r = await callOpenAI(settings, systemPrompt, userPrompt, true);
+    rawText = r.text || null;
+    if (r.error) logger_default.warn("OpenAI urgency analysis failed", { error: r.error });
+  } else if (provider === "gemini") {
     const r = await callGemini(settings, systemPrompt, userPrompt, null);
     rawText = r.text || null;
     if (r.error) logger_default.warn("Gemini urgency analysis failed", { error: r.error });
@@ -101826,9 +101837,11 @@ ${body4}`;
   let rawText = null;
   let llmError = null;
   if (provider === "ollama") rawText = await callOllama(settings, systemPrompt, userPrompt);
-  else if (provider === "openai") rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-  else if (provider === "openai_compatible") rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-  else if (provider === "gemini") {
+  else if (provider === "openai" || provider === "openai_compatible") {
+    const r = await callOpenAI(settings, systemPrompt, userPrompt, true);
+    if (r.error) llmError = r.error;
+    else rawText = r.text;
+  } else if (provider === "gemini") {
     const result = await callGemini(settings, systemPrompt, userPrompt, ACTION_ITEMS_GEMINI_SCHEMA);
     if (result.error) llmError = result.error;
     else rawText = result.text;
@@ -101912,8 +101925,11 @@ ${notesText}`;
     let rawText = null;
     let llmError = null;
     if (provider === "ollama") rawText = await callOllama(settings, systemPrompt, userPrompt);
-    else if (provider === "openai" || provider === "openai_compatible") rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-    else if (provider === "gemini") {
+    else if (provider === "openai" || provider === "openai_compatible") {
+      const r = await callOpenAI(settings, systemPrompt, userPrompt, false);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
+    } else if (provider === "gemini") {
       const r = await callGemini(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
@@ -101946,8 +101962,11 @@ Return ONLY the rewritten text with no explanations, introductions, or meta-comm
     let rawText = null;
     let llmError = null;
     if (provider === "ollama") rawText = await callOllama(settings, systemPrompt, userPrompt);
-    else if (provider === "openai" || provider === "openai_compatible") rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-    else if (provider === "gemini") {
+    else if (provider === "openai" || provider === "openai_compatible") {
+      const r = await callOpenAI(settings, systemPrompt, userPrompt, false);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
+    } else if (provider === "gemini") {
       const r = await callGemini(settings, systemPrompt, userPrompt, false, 6e4);
       if (r.error) llmError = r.error;
       else rawText = r.text;
@@ -102073,8 +102092,11 @@ METRICS:
 ${metrics}`;
     let rawText = null, llmError = null;
     if (provider === "ollama") rawText = await callOllama(settings, systemPrompt, userPrompt);
-    else if (provider === "openai" || provider === "openai_compatible") rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-    else if (provider === "gemini") {
+    else if (provider === "openai" || provider === "openai_compatible") {
+      const r = await callOpenAI(settings, systemPrompt, userPrompt, false);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
+    } else if (provider === "gemini") {
       const r = await callGemini(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
@@ -102275,8 +102297,11 @@ ${contentText}`;
     let rawText = null;
     let llmError = null;
     if (provider === "ollama") rawText = await callOllama(settings, systemPrompt, userPrompt);
-    else if (provider === "openai" || provider === "openai_compatible") rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-    else if (provider === "gemini") {
+    else if (provider === "openai" || provider === "openai_compatible") {
+      const r = await callOpenAI(settings, systemPrompt, userPrompt, false);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
+    } else if (provider === "gemini") {
       const r = await callGemini(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
@@ -102338,8 +102363,11 @@ ${ticketsText}`;
     let rawText = null;
     let llmError = null;
     if (provider === "ollama") rawText = await callOllama(settings, systemPrompt, userPrompt);
-    else if (provider === "openai" || provider === "openai_compatible") rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-    else if (provider === "gemini") {
+    else if (provider === "openai" || provider === "openai_compatible") {
+      const r = await callOpenAI(settings, systemPrompt, userPrompt, false);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
+    } else if (provider === "gemini") {
       const r = await callGemini(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
@@ -102395,8 +102423,11 @@ ${contentText}`;
     let rawText = null;
     let llmError = null;
     if (provider === "ollama") rawText = await callOllama(settings, systemPrompt, userPrompt);
-    else if (provider === "openai" || provider === "openai_compatible") rawText = await callOpenAI(settings, systemPrompt, userPrompt);
-    else if (provider === "gemini") {
+    else if (provider === "openai" || provider === "openai_compatible") {
+      const r = await callOpenAI(settings, systemPrompt, userPrompt, false);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
+    } else if (provider === "gemini") {
       const r = await callGemini(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
@@ -102497,11 +102528,20 @@ GUIDELINES:
             const d = await r.json();
             rawText = d.choices?.[0]?.message?.content?.trim() || null;
           } else {
-            logger_default.error("OpenAI chat non-OK", { status: r.status });
+            let detail = `HTTP ${r.status}`;
+            try {
+              const errBody = await r.json();
+              detail = errBody.error?.message || errBody.error || detail;
+            } catch {
+            }
+            logger_default.error("OpenAI chat non-OK", { status: r.status, detail });
+            llmError = `OpenAI error: ${detail}`;
           }
         } finally {
           clearTimeout(timer);
         }
+      } else {
+        llmError = "OpenAI API key not configured. Add it in Setup \u2192 AI Settings.";
       }
     } else if (provider === "gemini") {
       const historyBlock = history.length > 0 ? history.map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`).join("\n\n") + "\n\n" : "";
