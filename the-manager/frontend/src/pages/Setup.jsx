@@ -2,12 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Button, TextField, Select, MenuItem,
   FormControl, InputLabel, Divider, CircularProgress, Alert,
-  InputAdornment, IconButton, Chip, Paper, Link,
+  InputAdornment, IconButton, Chip, Paper, Link, Switch, FormControlLabel,
 } from '@mui/material';
 import {
   SmartToy, Visibility, VisibilityOff, CheckCircle, Save,
   Email, CheckCircleOutline, ErrorOutline, Launch, BugReport,
-  SyncAlt, CloudOff,
+  SyncAlt, CloudOff, FeedOutlined, Groups, ToggleOn,
 } from '@mui/icons-material';
 import api from '../api/axios';
 
@@ -29,6 +29,105 @@ const GEMINI_MODELS = [
   'gemini-3-flash-preview',
 ];
 const OLLAMA_DEFAULTS = ['llama3.1:latest', 'llama3.2:latest', 'mistral:latest', 'phi3:latest', 'gemma2:latest'];
+
+// ─── Features Section ────────────────────────────────────────────────────────
+function FeaturesSection() {
+  const [loading, setLoading]   = useState(true);
+  const [saving, setSaving]     = useState(null); // key being saved
+  const [flags, setFlags]       = useState({ feature_team_board: false, feature_ai_newsletter: false });
+  // Dependency config status
+  const [jiraOk, setJiraOk]     = useState(null);
+  const [aiOk,   setAiOk]       = useState(null);
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/features'),
+      api.get('/jira/settings').catch(() => ({ data: {} })),
+      api.get('/ai/settings').catch(() => ({ data: {} })),
+    ]).then(([featRes, jiraRes, aiRes]) => {
+      setFlags(featRes.data);
+      setJiraOk(!!(jiraRes.data.apiTokenSet && jiraRes.data.baseUrl));
+      const ai = aiRes.data;
+      setAiOk(!!(ai.openaiApiKeySet || ai.geminiApiKeySet || ai.provider === 'ollama'));
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const toggle = async (key, value) => {
+    setSaving(key);
+    try {
+      await api.put('/features', { [key]: value });
+      setFlags(f => ({ ...f, [key]: value }));
+    } catch { /* ignore */ }
+    finally { setSaving(null); }
+  };
+
+  if (loading) return <Box display="flex" justifyContent="center" py={4}><CircularProgress size={24} /></Box>;
+
+  const FeatureRow = ({ flagKey, label, description, icon, enabled, available, unavailableMsg, learnMorePath }) => (
+    <Box
+      sx={{
+        display: 'flex', alignItems: 'flex-start', gap: 2, py: 2,
+        borderBottom: '1px solid #f1f5f9',
+        '&:last-child': { borderBottom: 0 },
+        opacity: (!available && !enabled) ? 0.6 : 1,
+      }}
+    >
+      <Box sx={{ mt: 0.25, color: enabled ? '#6366f1' : 'text.disabled' }}>{icon}</Box>
+      <Box sx={{ flex: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="body1" fontWeight={600}>{label}</Typography>
+          {enabled && <Chip label="Enabled" size="small" color="primary" sx={{ height: 20, fontSize: 10 }} />}
+        </Box>
+        <Typography variant="body2" color="text.secondary" mt={0.25}>{description}</Typography>
+        {enabled && !available && (
+          <Alert severity="warning" sx={{ mt: 1, py: 0.5, borderRadius: 2, fontSize: 12 }}>
+            {unavailableMsg}
+          </Alert>
+        )}
+        {!enabled && !available && (
+          <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5 }}>
+            {unavailableMsg}
+          </Typography>
+        )}
+      </Box>
+      <FormControlLabel
+        control={
+          <Switch
+            checked={enabled}
+            onChange={e => toggle(flagKey, e.target.checked)}
+            disabled={saving === flagKey}
+            color="primary"
+          />
+        }
+        label=""
+        sx={{ mr: 0 }}
+      />
+    </Box>
+  );
+
+  return (
+    <Box>
+      <FeatureRow
+        flagKey="feature_ai_newsletter"
+        label="AI Newsletter"
+        description="Weekly digest of your initiatives, meeting notes, and tasks summarised by AI. Requires an AI provider to be configured."
+        icon={<FeedOutlined />}
+        enabled={flags.feature_ai_newsletter}
+        available={!!aiOk}
+        unavailableMsg="AI provider not configured — go to the AI Model section below to set one up."
+      />
+      <FeatureRow
+        flagKey="feature_team_board"
+        label="Team Board"
+        description="JIRA-powered team allocation view showing sprint tickets, assignees, story points and past contributors."
+        icon={<Groups />}
+        enabled={flags.feature_team_board}
+        available={!!jiraOk}
+        unavailableMsg="JIRA integration not configured — go to the JIRA section below to add your credentials."
+      />
+    </Box>
+  );
+}
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 function Section({ icon, title, subtitle, children }) {
@@ -796,6 +895,15 @@ export default function Setup() {
           Configure AI providers and integrations. Settings are stored in the database and take effect immediately.
         </Typography>
       </Box>
+
+      {/* Features */}
+      <Section
+        icon={<ToggleOn sx={{ color: '#6366f1', fontSize: 22 }} />}
+        title="Features"
+        subtitle="Enable optional pages that appear in the sidebar"
+      >
+        <FeaturesSection />
+      </Section>
 
       {/* AI */}
       <Section

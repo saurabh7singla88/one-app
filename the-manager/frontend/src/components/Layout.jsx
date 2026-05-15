@@ -7,7 +7,7 @@ import {
 import {
   Dashboard as DashboardIcon, List as ListIcon, Logout, Menu as MenuIcon,
   AccountTree, CheckBox as TasksIcon, People as PeopleIcon,
-  NoteAlt, EventNote, FeedOutlined,
+  NoteAlt, EventNote, FeedOutlined, Groups,
   Settings as SettingsIcon, ChevronLeft, ChevronRight, HelpOutline,
   SyncAlt, CloudOff, CheckCircle,
 } from '@mui/icons-material';
@@ -43,6 +43,19 @@ export default function Layout() {
   useEffect(() => {
     api.get('/sync/status').then(r => setSyncStatus(r.data)).catch(() => {});
   }, []);
+
+  // ── Feature flags (from Setup → Features toggles) ──────────────────────
+  const [jiraEnabled,      setJiraEnabled]      = useState(false);
+  const [aiEnabled,        setAiEnabled]        = useState(false);
+
+  useEffect(() => {
+    api.get('/features')
+      .then(r => {
+        setJiraEnabled(!!r.data.feature_team_board);
+        setAiEnabled(!!r.data.feature_ai_newsletter);
+      })
+      .catch(() => {});
+  }, [location.pathname]); // re-fetch on every navigation so toggles take effect immediately
 
   const handlePush = useCallback(async () => {
     if (pushing || pulling) return;
@@ -105,7 +118,8 @@ export default function Layout() {
 
     { text: 'Notes',         icon: <NoteAlt fontSize="small" />,         path: '/notes' },
     { text: 'Meeting Notes', icon: <EventNote fontSize="small" />,       path: '/meeting-notes' },
-    { text: 'AI Newsletter',  icon: <FeedOutlined fontSize="small" />,    path: '/ai-newsletter' },
+    ...(aiEnabled   ? [{ text: 'AI Newsletter', icon: <FeedOutlined fontSize="small" />, path: '/ai-newsletter' }] : []),
+    ...(jiraEnabled ? [{ text: 'Team Board',    icon: <Groups fontSize="small" />,        path: '/team-board'    }] : []),
     { text: 'Users',         icon: <PeopleIcon fontSize="small" />,      path: '/users' },
     { text: 'Setup',         icon: <SettingsIcon fontSize="small" />,    path: '/setup' },
     { text: 'Help',          icon: <HelpOutline fontSize="small" />,     path: '/help' },

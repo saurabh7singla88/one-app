@@ -17981,17 +17981,17 @@ var require_router = __commonJS({
     var toString2 = Object.prototype.toString;
     var proto = module2.exports = function(options) {
       var opts = options || {};
-      function router13(req, res, next) {
-        router13.handle(req, res, next);
+      function router14(req, res, next) {
+        router14.handle(req, res, next);
       }
-      setPrototypeOf(router13, proto);
-      router13.params = {};
-      router13._params = [];
-      router13.caseSensitive = opts.caseSensitive;
-      router13.mergeParams = opts.mergeParams;
-      router13.strict = opts.strict;
-      router13.stack = [];
-      return router13;
+      setPrototypeOf(router14, proto);
+      router14.params = {};
+      router14._params = [];
+      router14.caseSensitive = opts.caseSensitive;
+      router14.mergeParams = opts.mergeParams;
+      router14.strict = opts.strict;
+      router14.stack = [];
+      return router14;
     };
     proto.param = function param(name, fn) {
       if (typeof name === "function") {
@@ -20583,7 +20583,7 @@ var require_application = __commonJS({
   "../backend/node_modules/express/lib/application.js"(exports2, module2) {
     "use strict";
     var finalhandler = require_finalhandler();
-    var Router7 = require_router();
+    var Router8 = require_router();
     var methods = require_methods();
     var middleware = require_init();
     var query = require_query();
@@ -20648,7 +20648,7 @@ var require_application = __commonJS({
     };
     app2.lazyrouter = function lazyrouter() {
       if (!this._router) {
-        this._router = new Router7({
+        this._router = new Router8({
           caseSensitive: this.enabled("case sensitive routing"),
           strict: this.enabled("strict routing")
         });
@@ -20657,17 +20657,17 @@ var require_application = __commonJS({
       }
     };
     app2.handle = function handle(req, res, callback) {
-      var router13 = this._router;
+      var router14 = this._router;
       var done = callback || finalhandler(req, res, {
         env: this.get("env"),
         onerror: logerror.bind(this)
       });
-      if (!router13) {
+      if (!router14) {
         debug("no routes defined on app");
         done();
         return;
       }
-      router13.handle(req, res, done);
+      router14.handle(req, res, done);
     };
     app2.use = function use(fn) {
       var offset = 0;
@@ -20687,15 +20687,15 @@ var require_application = __commonJS({
         throw new TypeError("app.use() requires a middleware function");
       }
       this.lazyrouter();
-      var router13 = this._router;
+      var router14 = this._router;
       fns.forEach(function(fn2) {
         if (!fn2 || !fn2.handle || !fn2.set) {
-          return router13.use(path2, fn2);
+          return router14.use(path2, fn2);
         }
         debug(".use app under %s", path2);
         fn2.mountpath = path2;
         fn2.parent = this;
-        router13.use(path2, function mounted_app(req, res, next) {
+        router14.use(path2, function mounted_app(req, res, next) {
           var orig = req.app;
           fn2.handle(req, res, function(err) {
             setPrototypeOf(req, orig.request);
@@ -22512,7 +22512,7 @@ var require_express = __commonJS({
     var mixin = require_merge_descriptors();
     var proto = require_application();
     var Route = require_route();
-    var Router7 = require_router();
+    var Router8 = require_router();
     var req = require_request();
     var res = require_response();
     exports2 = module2.exports = createApplication;
@@ -22535,7 +22535,7 @@ var require_express = __commonJS({
     exports2.request = req;
     exports2.response = res;
     exports2.Route = Route;
-    exports2.Router = Router7;
+    exports2.Router = Router8;
     exports2.json = bodyParser.json;
     exports2.query = require_query();
     exports2.raw = bodyParser.raw;
@@ -100137,7 +100137,7 @@ __export(server_exports, {
   startServer: () => startServer
 });
 module.exports = __toCommonJS(server_exports);
-var import_express13 = __toESM(require_express2(), 1);
+var import_express14 = __toESM(require_express2(), 1);
 var import_cors = __toESM(require_lib3(), 1);
 var import_dotenv = __toESM(require_main(), 1);
 
@@ -103315,6 +103315,232 @@ router10.get("/confluence/fetch", async (req, res, next) => {
     next(err);
   }
 });
+router10.get("/sprints", async (req, res, next) => {
+  try {
+    const { project } = req.query;
+    if (!project?.trim()) {
+      return res.status(400).json({ error: "Project key is required." });
+    }
+    const settings = await loadJiraSettings();
+    if (!settings["jira_base_url"] || !settings["jira_email"] || !settings["jira_api_token"]) {
+      return res.status(400).json({ error: "JIRA is not configured." });
+    }
+    const baseUrl = validateAtlassianBaseUrl(settings["jira_base_url"]);
+    const credentials = Buffer.from(`${settings["jira_email"]}:${settings["jira_api_token"]}`).toString("base64");
+    const headers = { "Authorization": `Basic ${credentials}`, "Accept": "application/json" };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15e3);
+    try {
+      const boardUrl = new URL(`${baseUrl}/rest/agile/1.0/board`);
+      boardUrl.searchParams.set("projectKeyOrId", project.trim().toUpperCase());
+      boardUrl.searchParams.set("maxResults", "10");
+      const boardRes = await fetch(boardUrl.toString(), { headers, signal: controller.signal });
+      if (boardRes.status === 401) return res.status(401).json({ error: "JIRA authentication failed." });
+      if (boardRes.status === 403) return res.status(403).json({ error: "Access denied. Agile API may require Software project type." });
+      if (!boardRes.ok) {
+        return res.status(502).json({ error: `Could not load boards (status ${boardRes.status}). This project may not have a board.` });
+      }
+      const boardData = await boardRes.json();
+      const boards = boardData.values || [];
+      if (boards.length === 0) {
+        return res.status(404).json({ error: "No boards found for this project." });
+      }
+      const board = boards.find((b) => b.type === "scrum") || boards[0];
+      const sprintUrl = new URL(`${baseUrl}/rest/agile/1.0/board/${board.id}/sprint`);
+      sprintUrl.searchParams.set("state", "active,future,closed");
+      sprintUrl.searchParams.set("maxResults", "50");
+      const sprintRes = await fetch(sprintUrl.toString(), { headers, signal: controller.signal });
+      if (!sprintRes.ok) {
+        return res.status(502).json({ error: `Could not load sprints (status ${sprintRes.status}).` });
+      }
+      const sprintData = await sprintRes.json();
+      const sprints = (sprintData.values || []).sort((a, b) => {
+        const order = { active: 0, future: 1, closed: 2 };
+        if (order[a.state] !== order[b.state]) return order[a.state] - order[b.state];
+        return new Date(b.startDate || 0) - new Date(a.startDate || 0);
+      }).map((s) => ({
+        id: s.id,
+        name: s.name,
+        state: s.state,
+        // active | future | closed
+        startDate: s.startDate || null,
+        endDate: s.endDate || null
+      }));
+      res.json({ board: { id: board.id, name: board.name }, sprints });
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (err) {
+    if (err.name === "AbortError") return res.status(504).json({ error: "Request timed out." });
+    next(err);
+  }
+});
+router10.get("/team", async (req, res, next) => {
+  try {
+    const { project, sprint, maxResults = 100 } = req.query;
+    if (!project?.trim()) {
+      return res.status(400).json({ error: "Project key is required. Pass ?project=PROJ" });
+    }
+    if (!/^[A-Z][A-Z0-9_]+$/i.test(project.trim())) {
+      return res.status(400).json({ error: "Invalid project key format." });
+    }
+    const settings = await loadJiraSettings();
+    if (!settings["jira_base_url"] || !settings["jira_email"] || !settings["jira_api_token"]) {
+      return res.status(400).json({ error: "JIRA is not configured. Please set up JIRA credentials in Settings." });
+    }
+    const baseUrl = validateAtlassianBaseUrl(settings["jira_base_url"]);
+    const credentials = Buffer.from(`${settings["jira_email"]}:${settings["jira_api_token"]}`).toString("base64");
+    const cap = Math.min(Math.max(parseInt(maxResults, 10) || 100, 1), 200);
+    let spFieldId = null;
+    try {
+      const fieldsRes = await fetch(`${baseUrl}/rest/api/3/field`, {
+        headers: { "Authorization": `Basic ${credentials}`, "Accept": "application/json" }
+      });
+      if (fieldsRes.ok) {
+        const allFields = await fieldsRes.json();
+        const spField = allFields.find(
+          (f) => f.name?.toLowerCase() === "story points" || f.name?.toLowerCase() === "story point estimate"
+        );
+        if (spField) spFieldId = spField.id;
+      }
+    } catch (_) {
+    }
+    const SP_FIELDS = spFieldId ? [spFieldId] : ["customfield_10016", "customfield_10028", "customfield_10014", "customfield_10004"];
+    const FIELDS = `summary,status,priority,assignee,issuetype,updated,labels,components,${SP_FIELDS.join(",")},timeoriginalestimate,timeestimate`;
+    const doSearch = async (jql2) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3e4);
+      try {
+        const searchUrl = new URL(`${baseUrl}/rest/api/3/search/jql`);
+        searchUrl.searchParams.set("jql", jql2);
+        searchUrl.searchParams.set("maxResults", String(cap));
+        searchUrl.searchParams.set("fields", FIELDS);
+        searchUrl.searchParams.set("expand", "changelog");
+        return await fetch(searchUrl.toString(), {
+          headers: { "Authorization": `Basic ${credentials}`, "Accept": "application/json" },
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+    let jql;
+    let usedFallback = false;
+    if (sprint === "active" || sprint === "") {
+      jql = `project = "${project.trim()}" AND sprint in openSprints() ORDER BY assignee ASC, priority DESC, updated DESC`;
+    } else {
+      jql = `project = "${project.trim()}" AND sprint = "${sprint.trim()}" ORDER BY assignee ASC, priority DESC, updated DESC`;
+    }
+    let jiraRes = await doSearch(jql);
+    if ((jiraRes.status === 410 || jiraRes.status === 400) && (sprint === "active" || sprint === "")) {
+      usedFallback = true;
+      jql = `project = "${project.trim()}" AND statusCategory != Done ORDER BY assignee ASC, priority DESC, updated DESC`;
+      jiraRes = await doSearch(jql);
+    }
+    if (jiraRes.status === 401) {
+      return res.status(401).json({ error: "JIRA authentication failed." });
+    }
+    if (jiraRes.status === 403) {
+      return res.status(403).json({ error: "Access denied. Check your JIRA permissions." });
+    }
+    if (!jiraRes.ok) {
+      const body4 = await jiraRes.text().catch(() => "");
+      logger_default.error("JIRA search error", { status: jiraRes.status, body: body4.slice(0, 300) });
+      return res.status(502).json({ error: `JIRA API returned status ${jiraRes.status}` });
+    }
+    const data = await jiraRes.json();
+    const issues = (data.issues || []).map((issue) => {
+      const f = issue.fields || {};
+      const contributorsMap = /* @__PURE__ */ new Map();
+      const histories = issue.changelog?.histories || [];
+      for (const history of histories) {
+        for (const item of history.items || []) {
+          if (item.field === "assignee" && item.toString) {
+            const id = item.to || item.toString;
+            if (id && !contributorsMap.has(id)) {
+              contributorsMap.set(id, {
+                name: item.toString,
+                avatar: null,
+                accountId: item.to || null,
+                role: "past"
+              });
+            }
+          }
+        }
+      }
+      if (f.assignee) {
+        const id = f.assignee.accountId || f.assignee.displayName;
+        contributorsMap.set(id, {
+          name: f.assignee.displayName,
+          avatar: f.assignee.avatarUrls?.["32x32"] || null,
+          accountId: f.assignee.accountId || null,
+          role: "current"
+        });
+      }
+      const contributors = contributorsMap.size > 0 ? Array.from(contributorsMap.values()) : [{ name: "Unassigned", avatar: null, accountId: null, role: "current" }];
+      return {
+        key: issue.key,
+        url: `${baseUrl}/browse/${issue.key}`,
+        summary: f.summary || "",
+        status: f.status?.name || "",
+        statusCategory: f.status?.statusCategory?.name || "",
+        priority: f.priority?.name || "",
+        priorityId: f.priority?.id || null,
+        issueType: f.issuetype?.name || "",
+        assignee: f.assignee?.displayName || "Unassigned",
+        assigneeAvatar: f.assignee?.avatarUrls?.["32x32"] || null,
+        assigneeId: f.assignee?.accountId || null,
+        contributors,
+        labels: f.labels || [],
+        components: (f.components || []).map((c) => c.name),
+        storyPoints: SP_FIELDS.reduce((v, k) => v ?? (f[k] != null ? Number(f[k]) : null), null),
+        originalEstimate: f.timeoriginalestimate || null,
+        remainingEstimate: f.timeestimate || null,
+        updated: f.updated || null
+      };
+    });
+    const teamMap = {};
+    for (const issue of issues) {
+      for (const contributor of issue.contributors) {
+        const name = contributor.name;
+        if (!teamMap[name]) {
+          teamMap[name] = {
+            name,
+            avatar: contributor.avatar,
+            accountId: contributor.accountId,
+            issues: [],
+            totalStoryPoints: 0,
+            issueCount: 0
+          };
+        }
+        teamMap[name].issues.push({ ...issue, myRole: contributor.role });
+        teamMap[name].issueCount += 1;
+        if (contributor.role === "current" && issue.storyPoints) {
+          teamMap[name].totalStoryPoints += issue.storyPoints;
+        }
+      }
+    }
+    const team = Object.values(teamMap).sort((a, b) => {
+      if (a.name === "Unassigned") return 1;
+      if (b.name === "Unassigned") return -1;
+      return a.name.localeCompare(b.name);
+    });
+    const spFieldUsed = spFieldId || (issues.length > 0 ? SP_FIELDS.find((k) => data.issues[0]?.fields?.[k] != null) || null : null);
+    res.json({
+      total: data.total || issues.length,
+      returned: issues.length,
+      jql,
+      sprintFallback: usedFallback,
+      spFieldUsed,
+      team
+    });
+  } catch (err) {
+    if (err.name === "AbortError") {
+      return res.status(504).json({ error: "JIRA request timed out." });
+    }
+    next(err);
+  }
+});
 var jira_default = router10;
 
 // ../backend/src/routes/integrations.js
@@ -104016,6 +104242,46 @@ router12.delete("/config", (_req, res) => {
 });
 var sync_default = router12;
 
+// ../backend/src/routes/features.js
+var import_express13 = __toESM(require_express2(), 1);
+var router13 = (0, import_express13.Router)();
+router13.use(authenticate);
+var FEATURES = {
+  feature_team_board: "false",
+  feature_ai_newsletter: "false"
+};
+router13.get("/", async (req, res, next) => {
+  try {
+    const rows = await prisma.appSetting.findMany({
+      where: { key: { in: Object.keys(FEATURES) } }
+    });
+    const map = { ...FEATURES };
+    for (const row of rows) map[row.key] = row.value;
+    res.json(Object.fromEntries(
+      Object.entries(map).map(([k, v]) => [k, v === "true"])
+    ));
+  } catch (err) {
+    next(err);
+  }
+});
+router13.put("/", async (req, res, next) => {
+  try {
+    const updates = {};
+    for (const key of Object.keys(FEATURES)) {
+      if (key in req.body) updates[key] = req.body[key] ? "true" : "false";
+    }
+    await Promise.all(
+      Object.entries(updates).map(
+        ([key, value]) => prisma.appSetting.upsert({ where: { key }, update: { value }, create: { key, value } })
+      )
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+var features_default = router13;
+
 // ../backend/src/middleware/errorHandler.js
 var import_fs2 = require("fs");
 function writeServerLog(msg) {
@@ -104063,7 +104329,7 @@ var errorHandler = (err, req, res, next) => {
 
 // ../backend/src/server.js
 import_dotenv.default.config();
-var app = (0, import_express13.default)();
+var app = (0, import_express14.default)();
 var PORT = process.env.PORT || 47421;
 var allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || ["http://localhost:5173"];
 app.use((0, import_cors.default)({
@@ -104076,8 +104342,8 @@ app.use((0, import_cors.default)({
   },
   credentials: true
 }));
-app.use(import_express13.default.json());
-app.use(import_express13.default.urlencoded({ extended: true }));
+app.use(import_express14.default.json());
+app.use(import_express14.default.urlencoded({ extended: true }));
 app.use("/api/auth", auth_default);
 app.use("/api/initiatives", initiatives_default);
 app.use("/api/users", users_default);
@@ -104090,6 +104356,7 @@ app.use("/api/meeting-notes", meeting_notes_default);
 app.use("/api/jira", jira_default);
 app.use("/api/integrations", integrations_default);
 app.use("/api/sync", sync_default);
+app.use("/api/features", features_default);
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: (/* @__PURE__ */ new Date()).toISOString() });
 });
