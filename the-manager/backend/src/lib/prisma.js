@@ -18,6 +18,33 @@
 import _prismaClient from '@prisma/client';
 const { PrismaClient } = _prismaClient;
 
+// When DATABASE_URL is a Turso/libsql URL, use the driver adapter so Prisma
+// Prisma 7 always requires a driver adapter — the URL is no longer in schema.prisma.
+// For web/Docker:  TURSO_DATABASE_URL=libsql://... (Turso cloud)
+// For desktop:     DATABASE_URL=file:/path/to/app.db (local SQLite via libsql file driver)
+async function createPrismaClient() {
+  const { PrismaLibSql } = await import('@prisma/adapter-libsql');
+
+  const tursoUrl = process.env.TURSO_DATABASE_URL ?? '';
+  const fileUrl  = process.env.DATABASE_URL ?? '';
+
+  const isRemote = tursoUrl.startsWith('libsql://') || tursoUrl.startsWith('libsql+wss://');
+  const isFile   = fileUrl.startsWith('file:');
+
+  if (!isRemote && !isFile) {
+    throw new Error(
+      'No database configured. Set TURSO_DATABASE_URL (web) or DATABASE_URL=file:/path (desktop).'
+    );
+  }
+
+  // v7 adapter takes a config object directly — no need to create a Client manually
+  const adapter = new PrismaLibSql({
+    url:       isRemote ? tursoUrl : fileUrl,
+    authToken: isRemote ? process.env.TURSO_AUTH_TOKEN : undefined,
+  });
+  return new PrismaClient({ adapter });
+}
+
 const parse = (val, fallback = null) => {
   if (val === null || val === undefined) return fallback;
   if (typeof val !== 'string') return val;
@@ -30,7 +57,7 @@ const stringify = (val) => {
   return JSON.stringify(val);
 };
 
-const base = new PrismaClient();
+const base = await createPrismaClient();
 
 // Keep the Prisma query engine process alive while the server is running.
 // The engine exits after ~5 min of idle by default — this prevents that.

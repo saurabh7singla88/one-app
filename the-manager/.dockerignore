@@ -1,0 +1,8 @@
+**/node_modules
+**/.git
+**/dist
+**/.env
+**/app.db*
+electron/
+sync-server/
+*.md

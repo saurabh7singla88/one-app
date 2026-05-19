@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
+import { decrypt } from '../middleware/cipher.js';
 import logger from '../lib/logger.js';
 
 const router = Router();
@@ -12,7 +13,9 @@ async function loadAtlassianSettings() {
     where: { key: { in: ['jira_base_url', 'jira_email', 'jira_api_token'] } }
   });
   const map = {};
-  for (const r of rows) map[r.key] = r.value;
+  for (const r of rows) {
+    map[r.key] = r.key === 'jira_api_token' ? decrypt(r.value) : r.value;
+  }
   return map;
 }
 

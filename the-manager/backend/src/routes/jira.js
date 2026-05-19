@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
+import { encrypt, decrypt } from '../middleware/cipher.js';
 import logger from '../lib/logger.js';
 
 const router = Router();
@@ -12,7 +13,9 @@ const SETTING_KEYS = ['jira_base_url', 'jira_email', 'jira_api_token'];
 async function loadJiraSettings() {
   const rows = await prisma.appSetting.findMany({ where: { key: { in: SETTING_KEYS } } });
   const map = {};
-  for (const row of rows) map[row.key] = row.value;
+  for (const row of rows) {
+    map[row.key] = row.key === 'jira_api_token' ? decrypt(row.value) : row.value;
+  }
   return map;
 }
 
@@ -86,8 +89,8 @@ router.put('/settings', async (req, res, next) => {
     if (apiToken) {
       upserts.push(prisma.appSetting.upsert({
         where: { key: 'jira_api_token' },
-        update: { value: apiToken },
-        create: { key: 'jira_api_token', value: apiToken },
+        update: { value: encrypt(apiToken) },
+        create: { key: 'jira_api_token', value: encrypt(apiToken) },
       }));
     }
 

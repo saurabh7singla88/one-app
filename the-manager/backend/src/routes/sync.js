@@ -269,55 +269,87 @@ async function restoreToLocal(data) {
 }
 
 /**
- * Write a data dump into Turso.
+ * Merge local data into Turso.
  *
- * Phase 1: DELETE all existing rows in a single atomic request (small payload).
- * Phase 2: INSERT rows in batches of INSERT_BATCH to avoid oversized HTTP
- *          requests that cause "fetch failed" connection resets.
+ * Strategy: "local wins when newer" — per row:
+ *   - If the row doesn't exist in Turso → INSERT
+ *   - If local updatedAt >= remote updatedAt → UPSERT (local wins)
+ *   - If local updatedAt < remote updatedAt → skip (remote is newer, don't overwrite)
+ *   - Rows that exist in Turso but not locally → DELETE (row was deleted locally)
  *
- * Each batch is wrapped in its own BEGIN/COMMIT so Turso auto-rolls back that
- * batch on error. If a batch fails the push route catches, logs, and returns
- * an error — the next push will retry from scratch.
+ * Tables without an updatedAt column fall back to INSERT OR REPLACE (always upsert).
  */
-async function restoreToTurso(data) {
-  const INSERT_BATCH = 200; // rows per pipeline request
+async function mergeToTurso(localData) {
+  const INSERT_BATCH = 200;
 
-  // Build all INSERT statements in FK-safe order
-  const allInserts = [];
+  await ensureSchemaInTurso();
+
+  // Fetch current remote state once (to compare updatedAt)
+  const remoteData = await dumpFromTurso();
+
   for (const table of TABLE_INSERT_ORDER) {
-    let rows = data[table] ?? [];
-    if (!rows.length) continue;
-    if (rows[0] && 'parentId' in rows[0]) rows = topoSort(rows);
-    for (const row of rows) {
+    let localRows  = localData[table]  ?? [];
+    const remoteRows = remoteData[table] ?? [];
+
+    if (localRows.length === 0 && remoteRows.length === 0) continue;
+
+    // Topo-sort self-referential tables
+    if (localRows.length && localRows[0] && 'parentId' in localRows[0]) {
+      localRows = topoSort(localRows);
+    }
+
+    const hasUpdatedAt = localRows.length > 0
+      ? 'updatedAt' in localRows[0]
+      : remoteRows.length > 0 && 'updatedAt' in remoteRows[0];
+
+    const remoteById = new Map(remoteRows.map(r => [String(r.id), r]));
+    const localById  = new Map(localRows.map(r => [String(r.id), r]));
+
+    // ── Rows to upsert ──────────────────────────────────────────────────────
+    const toUpsert = [];
+    for (const row of localRows) {
+      const remote = remoteById.get(String(row.id));
+      if (!hasUpdatedAt) {
+        // No timestamp — always upsert
+        toUpsert.push(row);
+      } else if (!remote) {
+        // New row locally
+        toUpsert.push(row);
+      } else {
+        const localTs  = row.updatedAt  ? new Date(row.updatedAt).getTime()  : 0;
+        const remoteTs = remote.updatedAt ? new Date(remote.updatedAt).getTime() : 0;
+        if (localTs >= remoteTs) toUpsert.push(row); // local is same age or newer
+        // else: remote is newer — skip
+      }
+    }
+
+    // ── Rows to delete (exist remotely but not locally) ─────────────────────
+    const toDelete = remoteRows.filter(r => !localById.has(String(r.id)));
+
+    if (toUpsert.length === 0 && toDelete.length === 0) continue;
+
+    // Build upsert statements
+    const upsertStmts = toUpsert.map(row => {
       const cols = Object.keys(row);
-      if (!cols.length) continue;
-      allInserts.push({
+      return {
         sql:  `INSERT OR REPLACE INTO "${table}" (${cols.map(c => `"${c}"`).join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
         args: cols.map(c => row[c] ?? null),
-      });
+      };
+    });
+
+    // Build delete statements
+    const deleteStmts = toDelete.map(row => ({
+      sql:  `DELETE FROM "${table}" WHERE id = ?`,
+      args: [row.id],
+    }));
+
+    const allStmts = [...upsertStmts, ...deleteStmts];
+
+    // Execute in batches
+    for (let i = 0; i < allStmts.length; i += INSERT_BATCH) {
+      const batch = allStmts.slice(i, i + INSERT_BATCH);
+      await tursoExec([{ sql: 'BEGIN' }, ...batch, { sql: 'COMMIT' }]);
     }
-  }
-
-  // Find which tables actually exist in Turso (may differ from local schema
-  // e.g. google_tokens only exists if Gmail was ever connected).
-  const existsResult = await tursoExec([{
-    sql: `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`,
-  }]);
-  const tursoTables = new Set(
-    (existsResult[0]?.rows ?? []).map(r => (typeof r[0] === 'object' ? r[0].value : r[0]))
-  );
-
-  // Phase 1: wipe all existing data (one small atomic request)
-  await tursoExec([
-    { sql: 'BEGIN' },
-    ...TABLE_DELETE_ORDER.filter(t => tursoTables.has(t)).map(t => ({ sql: `DELETE FROM "${t}"` })),
-    { sql: 'COMMIT' },
-  ]);
-
-  // Phase 2: insert in batches to keep each HTTP request small
-  for (let i = 0; i < allInserts.length; i += INSERT_BATCH) {
-    const batch = allInserts.slice(i, i + INSERT_BATCH);
-    await tursoExec([{ sql: 'BEGIN' }, ...batch, { sql: 'COMMIT' }]);
   }
 }
 
@@ -365,7 +397,7 @@ router.post('/push', async (_req, res) => {
   try {
     await ensureSchemaInTurso();   // create tables in Turso if this is the first push
     const data = await dumpFromLocal();
-    await restoreToTurso(data);
+    await mergeToTurso(data);
     lastPushAt  = new Date().toISOString();
     lastPushErr = null;
     res.json({ ok: true, pushedAt: lastPushAt, rowCounts: Object.fromEntries(TABLE_INSERT_ORDER.map(t => [t, data[t]?.length ?? 0])) });

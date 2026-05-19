@@ -167,6 +167,38 @@ All integrations are configured from the **Setup** page in the app sidebar — n
 
 ---
 
+## Database Options
+
+### Desktop (Electron)
+The desktop app always uses a local SQLite file — no configuration needed. The file is created automatically at:
+- **macOS**: `~/Library/Application Support/one-desktop/app.db`
+- **Windows**: `%APPDATA%\one-desktop\app.db`
+
+### Web / Docker
+Set one of these environment variables in your `.env` or `docker-compose.yml`:
+
+| Database | Variable | Example value |
+|----------|----------|---------------|
+| **Turso** (managed cloud SQLite) | `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` | `libsql://your-db.turso.io` |
+| **Self-hosted libsql server** ([sqld](https://github.com/tursodatabase/sqld)) | `TURSO_DATABASE_URL` | `http://your-server:8080` |
+| **Local SQLite file** (on the server/container) | `DATABASE_URL` | `file:/data/app.db` |
+
+`TURSO_DATABASE_URL` takes priority. If it is not set, `DATABASE_URL` is used. For the local file option in Docker, mount a volume so data persists across container restarts:
+
+```yaml
+volumes:
+  - ./data:/data
+environment:
+  DATABASE_URL: file:/data/app.db
+```
+
+No code or schema changes are needed to switch between these options — the driver handles all three transparently.
+
+### PostgreSQL
+PostgreSQL is not supported out of the box. Adding it would require a second Prisma schema (`provider = "postgresql"`) and a different adapter (`@prisma/adapter-pg`). The existing SQLite/Turso schema stays unchanged.
+
+---
+
 ## License
 
 MIT
