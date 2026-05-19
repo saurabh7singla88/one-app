@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Button, TextField, Select, MenuItem,
   FormControl, InputLabel, Divider, CircularProgress, Alert,
-  InputAdornment, IconButton, Chip, Paper, Link,
+  InputAdornment, IconButton, Chip, Paper, Link, Switch, FormControlLabel,
 } from '@mui/material';
 import {
   SmartToy, Visibility, VisibilityOff, CheckCircle, Save,
   Email, CheckCircleOutline, ErrorOutline, Launch, BugReport,
+  SyncAlt, CloudOff, FeedOutlined, Groups, ToggleOn,
 } from '@mui/icons-material';
 import api from '../api/axios';
 
@@ -28,6 +29,105 @@ const GEMINI_MODELS = [
   'gemini-3-flash-preview',
 ];
 const OLLAMA_DEFAULTS = ['llama3.1:latest', 'llama3.2:latest', 'mistral:latest', 'phi3:latest', 'gemma2:latest'];
+
+// ─── Features Section ────────────────────────────────────────────────────────
+function FeaturesSection() {
+  const [loading, setLoading]   = useState(true);
+  const [saving, setSaving]     = useState(null); // key being saved
+  const [flags, setFlags]       = useState({ feature_team_board: false, feature_ai_newsletter: false });
+  // Dependency config status
+  const [jiraOk, setJiraOk]     = useState(null);
+  const [aiOk,   setAiOk]       = useState(null);
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/features'),
+      api.get('/jira/settings').catch(() => ({ data: {} })),
+      api.get('/ai/settings').catch(() => ({ data: {} })),
+    ]).then(([featRes, jiraRes, aiRes]) => {
+      setFlags(featRes.data);
+      setJiraOk(!!(jiraRes.data.apiTokenSet && jiraRes.data.baseUrl));
+      const ai = aiRes.data;
+      setAiOk(!!(ai.openaiApiKeySet || ai.geminiApiKeySet || ai.provider === 'ollama'));
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const toggle = async (key, value) => {
+    setSaving(key);
+    try {
+      await api.put('/features', { [key]: value });
+      setFlags(f => ({ ...f, [key]: value }));
+    } catch { /* ignore */ }
+    finally { setSaving(null); }
+  };
+
+  if (loading) return <Box display="flex" justifyContent="center" py={4}><CircularProgress size={24} /></Box>;
+
+  const FeatureRow = ({ flagKey, label, description, icon, enabled, available, unavailableMsg, learnMorePath }) => (
+    <Box
+      sx={{
+        display: 'flex', alignItems: 'flex-start', gap: 2, py: 2,
+        borderBottom: '1px solid #f1f5f9',
+        '&:last-child': { borderBottom: 0 },
+        opacity: (!available && !enabled) ? 0.6 : 1,
+      }}
+    >
+      <Box sx={{ mt: 0.25, color: enabled ? '#6366f1' : 'text.disabled' }}>{icon}</Box>
+      <Box sx={{ flex: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="body1" fontWeight={600}>{label}</Typography>
+          {enabled && <Chip label="Enabled" size="small" color="primary" sx={{ height: 20, fontSize: 10 }} />}
+        </Box>
+        <Typography variant="body2" color="text.secondary" mt={0.25}>{description}</Typography>
+        {enabled && !available && (
+          <Alert severity="warning" sx={{ mt: 1, py: 0.5, borderRadius: 2, fontSize: 12 }}>
+            {unavailableMsg}
+          </Alert>
+        )}
+        {!enabled && !available && (
+          <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5 }}>
+            {unavailableMsg}
+          </Typography>
+        )}
+      </Box>
+      <FormControlLabel
+        control={
+          <Switch
+            checked={enabled}
+            onChange={e => toggle(flagKey, e.target.checked)}
+            disabled={saving === flagKey}
+            color="primary"
+          />
+        }
+        label=""
+        sx={{ mr: 0 }}
+      />
+    </Box>
+  );
+
+  return (
+    <Box>
+      <FeatureRow
+        flagKey="feature_ai_newsletter"
+        label="AI Newsletter"
+        description="Weekly digest of your initiatives, meeting notes, and tasks summarised by AI. Requires an AI provider to be configured."
+        icon={<FeedOutlined />}
+        enabled={flags.feature_ai_newsletter}
+        available={!!aiOk}
+        unavailableMsg="AI provider not configured — go to the AI Model section below to set one up."
+      />
+      <FeatureRow
+        flagKey="feature_team_board"
+        label="Team Board"
+        description="JIRA-powered team allocation view showing sprint tickets, assignees, story points and past contributors."
+        icon={<Groups />}
+        enabled={flags.feature_team_board}
+        available={!!jiraOk}
+        unavailableMsg="JIRA integration not configured — go to the JIRA section below to add your credentials."
+      />
+    </Box>
+  );
+}
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 function Section({ icon, title, subtitle, children }) {
@@ -500,7 +600,7 @@ function GmailSection() {
               </Button>
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              <strong>2. Generate an App Password</strong> — create one named "The Manager" and copy the 16-character code.{' '}
+              <strong>2. Generate an App Password</strong> — create one named "One" and copy the 16-character code.{' '}
               <Button
                 size="small" variant="text" endIcon={<Launch fontSize="small" />}
                 href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener"
@@ -640,6 +740,148 @@ function JiraSection() {
   );
 }
 
+// ─── Turso Sync Section ───────────────────────────────────────────────────────
+function TursoSection() {
+  const [status, setStatus]         = useState(null);  // { configured, databaseUrl, lastSyncAt }
+  const [loading, setLoading]       = useState(true);
+  const [saving, setSaving]         = useState(false);
+  const [removing, setRemoving]     = useState(false);
+  const [saved, setSaved]           = useState(false);
+  const [error, setError]           = useState('');
+  const [showToken, setShowToken]   = useState(false);
+  const [form, setForm] = useState({ databaseUrl: '', authToken: '' });
+
+  const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }));
+
+  useEffect(() => {
+    api.get('/sync/status')
+      .then(r => { setStatus(r.data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const save = async () => {
+    setError(''); setSaving(true); setSaved(false);
+    try {
+      await api.post('/sync/config', form);
+      setSaved(true);
+    } catch (e) {
+      setError(e.response?.data?.error || 'Failed to save credentials.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async () => {
+    setError(''); setRemoving(true);
+    try {
+      await api.delete('/sync/config');
+      setStatus(s => ({ ...s, configured: false, databaseUrl: null }));
+      setSaved(false);
+      setForm({ databaseUrl: '', authToken: '' });
+    } catch (e) {
+      setError(e.response?.data?.error || 'Failed to remove credentials.');
+    } finally {
+      setRemoving(false);
+    }
+  };
+
+  if (loading) return <CircularProgress size={24} />;
+
+  return (
+    <Box display="flex" flexDirection="column" gap={2.5}>
+      {/* Status chip */}
+      {status?.configured ? (
+        <Alert
+          severity="success"
+          icon={<CheckCircleOutline />}
+          sx={{ borderRadius: 2 }}
+          action={
+            <Button color="error" size="small" onClick={remove} disabled={removing}
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            >
+              {removing ? 'Removing…' : 'Disconnect'}
+            </Button>
+          }
+        >
+          Connected to Turso: <strong>{status.databaseUrl}</strong>
+          {(status.lastPushAt || status.lastPullAt) && (
+            <><br />
+              {status.lastPushAt && <small>Last push: {new Date(status.lastPushAt).toLocaleString()}</small>}
+              {status.lastPushAt && status.lastPullAt && <span> · </span>}
+              {status.lastPullAt && <small>Last pull: {new Date(status.lastPullAt).toLocaleString()}</small>}
+            </>
+          )}
+        </Alert>
+      ) : (
+        <Alert severity="info" icon={<CloudOff />} sx={{ borderRadius: 2 }}>
+          Not connected. Enter your Turso database URL and auth token below to enable cross-device sync.
+        </Alert>
+      )}
+
+      {/* How to get credentials */}
+      <Alert severity="info" icon={false} sx={{ borderRadius: 2, bgcolor: '#f8faff', border: '1px solid #e0e7ff' }}>
+        <Typography variant="caption" color="text.secondary">
+          Create a free database at{' '}
+          <Link href="https://turso.tech" target="_blank" rel="noreferrer">turso.tech</Link>, then run:
+          {' '}<code>turso db create one</code>{' '}and{' '}
+          <code>turso db tokens create one</code>
+          <br />The database URL looks like: <code>libsql://one-yourname.turso.io</code>
+        </Typography>
+      </Alert>
+
+      <TextField
+        label="Turso Database URL"
+        size="small"
+        fullWidth
+        value={form.databaseUrl}
+        onChange={set('databaseUrl')}
+        placeholder="libsql://your-db-name.turso.io"
+        helperText={status?.configured ? '✓ Credentials are currently active (restart required to change)' : ''}
+        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+      />
+
+      <TextField
+        label="Auth Token"
+        type={showToken ? 'text' : 'password'}
+        size="small"
+        fullWidth
+        value={form.authToken}
+        onChange={set('authToken')}
+        placeholder={status?.configured ? 'Paste new token to replace…' : 'Your Turso auth token'}
+        InputProps={{
+          endAdornment: (
+            <InputAdornment position="end">
+              <IconButton size="small" onClick={() => setShowToken(v => !v)}>
+                {showToken ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+              </IconButton>
+            </InputAdornment>
+          ),
+        }}
+        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+      />
+
+      {error && <Alert severity="error" sx={{ borderRadius: 2 }}>{error}</Alert>}
+      {saved && (
+        <Alert severity="success" icon={<CheckCircle />} sx={{ borderRadius: 2 }}>
+          Credentials saved! <strong>Restart the app</strong> to activate Turso sync.
+        </Alert>
+      )}
+
+      <Box display="flex" justifyContent="flex-end">
+        <Button
+          variant="contained"
+          onClick={save}
+          disabled={saving || !form.databaseUrl || !form.authToken}
+          startIcon={saving ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <Save fontSize="small" />}
+          sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, px: 3 }}
+        >
+          {saving ? 'Saving…' : 'Save Sync Settings'}
+        </Button>
+      </Box>
+    </Box>
+  );
+}
+
 // ─── Main Setup page ──────────────────────────────────────────────────────────
 export default function Setup() {
   return (
@@ -653,6 +895,15 @@ export default function Setup() {
           Configure AI providers and integrations. Settings are stored in the database and take effect immediately.
         </Typography>
       </Box>
+
+      {/* Features */}
+      <Section
+        icon={<ToggleOn sx={{ color: '#6366f1', fontSize: 22 }} />}
+        title="Features"
+        subtitle="Enable optional pages that appear in the sidebar"
+      >
+        <FeaturesSection />
+      </Section>
 
       {/* AI */}
       <Section
@@ -679,6 +930,15 @@ export default function Setup() {
         subtitle="Link JIRA tickets and Confluence pages to initiatives"
       >
         <JiraSection />
+      </Section>
+
+      {/* Turso Sync */}
+      <Section
+        icon={<SyncAlt sx={{ color: '#0ea5e9', fontSize: 22 }} />}
+        title="Cross-Device Sync (Turso)"
+        subtitle="Sync your data between Windows and Mac using a Turso embedded replica"
+      >
+        <TursoSection />
       </Section>
     </Box>
   );

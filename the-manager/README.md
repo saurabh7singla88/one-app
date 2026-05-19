@@ -1,492 +1,204 @@
-# The Manager
+# One
 
-A hierarchical initiative tracker and mind map tool designed for managers and VPs — track initiatives, sub-tasks, priorities, and meeting notes, powered by AI suggestions.
+An AI-powered initiative tracker and strategic management tool built for engineering managers 
+and VPs. Track projects, tasks, notes, and meeting outcomes across multiple workspaces — with 
+optional AI analysis, Gmail integration, and JIRA/Confluence connectivity.
+
+Available as a **desktop app** (Electron, macOS/Windows) or a **web app** (Node.js + React).
+
+---
 
 ## Features
 
-- Hierarchical initiative & task tracking with drill-down
-- Mind map visualization (ReactFlow)
-- AI-powered priority suggestions (Ollama, OpenAI, Gemini, or any OpenAI-compatible API)
-- Meeting Notes pulled directly from Gmail via IMAP
-- Brainstorm board
-- Password-protected Notes
-- Multi-user with JWT authentication
+### Initiative & Task Management
+- **Unlimited hierarchy** — Initiatives → Sub-initiatives → Tasks → Subtasks, nested to any depth
+- **Status workflow** — Open, In Progress, Blocked, On Hold, Completed, Cancelled
+- **Priority levels** — Critical, High, Medium, Low
+- **Drag-and-drop reordering** for root-level items
+- **Assignees** — multi-select from registered users with avatar display
+- **Due dates, start dates, and progress tracking** (0–100%)
+- **Tags/labels** for categorisation
+- **Standalone Tasks** — lightweight to-dos independent of the initiative tree, with checkbox completion
+
+### Canvas Workspaces
+- Named, colour-coded workspaces that scope initiatives, tasks, and notes
+- "All" mode to view everything across canvases
+- Canvas selector at the top of every list/view
+
+### AI Priority Suggestions
+- **Structural scoring** (no AI needed) — evaluates due dates, status, priority, staleness, blocked children, and open sub-item sprawl
+- **LLM description analysis** (optional) — sends initiative descriptions to Ollama, OpenAI, Gemini, or any OpenAI-compatible API to detect urgency language
+- Combined score ranks up to 8 initiatives in a suggestions drawer
+- Separate AI strip for standalone tasks on the Tasks page
+- Works fully offline with structural scoring; LLM is an optional enhancement
+
+### AI Writing Assistant
+- **Rephrase tool** on notes and descriptions — Professional, Elaborate, Concise, or Simplify styles
+- Preview before applying; retries automatically on rate limits (Gemini 429/503)
+
+### Mind Map Visualisation
+- Spatial node graph of initiative hierarchies using React Flow
+- Nodes colour-coded by status
+- Zoom, pan, mini-map, and fit-to-view controls
+- Click any node to open its detail drawer
+
+### Notes
+- Personal freeform notes with rich text editor (headings, bold, italic, lists, code blocks)
+- **Nested hierarchy** — parent/child note trees
+- **Password protection** — per-note lock using your login password; bcrypt-hashed
+- **Global password** — optional master password for the entire Notes section
+- Canvas scoping and search
+- Auto-save with 1-second debounce
+
+### Meeting Notes & Gmail Integration
+- Create manual meeting notes with subject, date, and body
+- **Pull emails from Gmail** via IMAP — fetches from a configurable label (e.g. "Gemini Notes")
+- Save any email as a meeting note linked to an initiative
+- **AI action-item extraction** — identifies action items from email body, separates "for you" vs others
+- View linked meeting notes inside initiative details
+
+### JIRA & Confluence Integration
+- Link JIRA tickets or Confluence pages to any initiative
+- Fetch live metadata — summary, status, priority, assignee, labels, content
+- Expand sub-tasks (JIRA) or child pages (Confluence)
+- **Per-item AI actions** — Summarise, Identify Risks, Surface Blockers, Key Decisions, Action Items
+- **Batch AI actions** on multiple linked items
+- **Chat panel** — ask natural-language questions about linked documents
+
+### Status Reports & Newsletter
+- **Status Report** — auto-generate a formatted progress update for any time period (week, month, custom range)
+- **AI Newsletter** — generate a stakeholder-ready summary of all active initiatives
+- Copy to clipboard for email/Slack
+
+### Dashboard
+- Top-level stats: total initiatives, in-progress, blocked, completed, completion rate
+- AI Priority Suggestions strip (initiatives + tasks)
+- Recent activity list
+
+### Detail Drawer
+- Opens on any initiative/task click with tabbed interface:
+  - **Overview** — title, description, status, priority, assignees, dates, progress, tags
+  - **Links** — attached URLs with title, description, category
+  - **Comments** — inline discussion thread
+  - **Activity** — full audit trail of changes
+  - **Meetings** — linked meeting notes
+  - **JIRA/Confluence** — linked tickets and pages
+
+### Cloud Sync (Turso)
+- **Push** local SQLite → Turso cloud database
+- **Pull** Turso → local (with automatic backup before overwrite)
+- Batched HTTP pipeline requests for reliable transfer
+- Configure from Setup → Sync with database URL and auth token
+
+### Multi-User & Security
+- JWT authentication with role-based access (Admin, Manager, Viewer)
+- AES-256 encryption for stored Gmail credentials
+- SSRF protection on JIRA/Confluence URLs
+- Electron: context isolation, no nodeIntegration
+
+---
+
+## Use Cases
+
+| Role | How One Helps |
+|------|---------------|
+| **Engineering Manager** | Track team initiatives across sprints, link JIRA tickets, pull meeting notes from Gmail, generate weekly status reports |
+| **VP / Director** | Bird's-eye dashboard of all programs, AI-ranked priorities, mind map for strategy reviews, brainstorm new initiatives |
+| **Tech Lead** | Standalone task list alongside initiative tree, notes for architecture decisions, Confluence integration for design docs |
+| **Individual Contributor** | Personal task tracking with canvas workspaces, password-protected notes, AI writing assistant for documentation |
 
 ---
 
 ## Tech Stack
 
-| Layer | Tech |
-|---|---|
-| Backend | Node.js 22, Express, Prisma v5, SQLite (better-sqlite3) |
-| Frontend | React 18, Redux Toolkit, Material-UI v5, ReactFlow, Vite |
-| AI | Ollama / OpenAI / Google Gemini / OpenAI-compatible |
-| Email | IMAP via `imapflow` + `mailparser` |
+| Layer | Technology |
+|-------|------------|
+| **Backend** | Node.js, Express, Prisma ORM, SQLite |
+| **Frontend** | React 18, Redux Toolkit, Material-UI v5, React Flow, Vite |
+| **Desktop** | Electron (macOS & Windows) |
+| **AI Providers** | Ollama (local), OpenAI, Google Gemini, any OpenAI-compatible API |
+| **Email** | IMAP via `imapflow` + `mailparser` |
+| **Cloud Sync** | Turso (LibSQL) HTTP Pipeline API |
+| **Security** | JWT, bcrypt, AES-256-GCM |
 
 ---
-
-## Quick Start
-
-### Prerequisites
-- Node.js 18+
-- npm
-
-### 1. Clone & install
-
-```bash
-git clone <repository-url>
-cd the-manager
-
-# Backend
-cd backend && npm install
-
-# Frontend
-cd ../frontend && npm install
-```
-
-### 2. Configure backend environment
-
-```bash
-cd backend
-cp .env.example .env   # or create .env manually
-```
-
-Minimum required `.env`:
-
-```env
-JWT_SECRET=your_random_secret_here
-NODE_ENV=development
-```
-
-### 3. Run Prisma migrations
-
-```bash
-cd backend
-npx prisma migrate dev
-```
-
-This creates `backend/prisma/dev.db` (SQLite).
-
-### 4. Start servers
-
-```bash
-# Terminal 1 — backend (port 3001)
-cd backend && npm run dev
-
-# Terminal 2 — frontend (port 5173)
-cd frontend && npm run dev
-```
-
-Open http://localhost:5173, register an account, and start tracking.
-
----
-
-## Configuration
-
-All optional features are configured from the **Setup** page inside the app (sidebar → Setup), or manually via `.env`.
-
-### AI Suggestions
-
-The app scores your initiatives structurally (priority, staleness, blocked sub-tasks, due dates) without any AI config. LLM analysis of descriptions is an optional enhancement.
-
-#### Option A — Ollama (free, local, recommended)
-
-1. Install Ollama: https://ollama.com
-2. Pull a model:
-   ```bash
-   ollama pull llama3.1
-   ```
-3. In the app, go to **Setup → AI** and select **Ollama**, set URL to `http://localhost:11434`.
-
-No API key needed.
-
-#### Option B — Google Gemini
-
-1. Get an API key: https://aistudio.google.com/apikey
-2. In the app go to **Setup → AI**, select **Gemini**, paste your API key, choose a model (e.g. `gemini-2.5-flash`).
-
-Alternatively, add to `.env`:
-```env
-AI_PROVIDER=gemini
-GEMINI_API_KEY=your_key_here
-GEMINI_MODEL=gemini-2.5-flash
-```
-
-#### Option C — OpenAI / ChatGPT
-
-1. Get an API key: https://platform.openai.com/api-keys
-2. In the app go to **Setup → AI**, select **OpenAI**, paste your API key.
-
-```env
-AI_PROVIDER=openai
-OPENAI_API_KEY=your_key_here
-OPENAI_MODEL=gpt-4o-mini
-```
-
-#### Option D — OpenAI-compatible (LM Studio, Groq, Together AI, Mistral, etc.)
-
-In the app select **OpenAI-compatible**, enter your base URL, API key, and model name.
-
-```env
-AI_PROVIDER=openai_compatible
-OPENAI_BASE_URL=https://api.groq.com/openai
-OPENAI_API_KEY=your_key_here
-OPENAI_MODEL=llama-3.1-70b-versatile
-```
-
-#### Option E — Disabled
-
-Select **Disabled** in Setup → AI. Structural scoring still works, only LLM description analysis is skipped.
-
----
-
-### Gmail Integration (Meeting Notes)
-
-The **Meeting Notes** page fetches emails from a Gmail label (e.g. `Gemini Notes`) via IMAP.
-
-#### Step 1 — Enable 2-Step Verification
-
-Go to https://myaccount.google.com/security and ensure 2-Step Verification is ON.
-
-#### Step 2 — Generate an App Password
-
-1. Visit https://myaccount.google.com/apppasswords
-2. Create a new App Password (name it anything, e.g. "The Manager")
-3. Copy the 16-character password
-
-#### Step 3 — Add to `.env`
-
-```env
-GMAIL_USER=you@gmail.com
-GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
-```
-
-#### Step 4 — Encrypt the password (recommended)
-
-Run the encryption helper once — it updates `.env` in place:
-
-```bash
-cd backend
-node setup-env.js
-```
-
-This:
-- Generates a `TOKEN_ENCRYPTION_KEY` (AES-256 key)
-- Encrypts `GMAIL_APP_PASSWORD` in `.env` as `enc:<iv>:<tag>:<ciphertext>`
-- The plaintext is never stored on disk after this
-
-Your `.env` will look like:
-```env
-GMAIL_USER=you@gmail.com
-TOKEN_ENCRYPTION_KEY=<64 hex chars>
-GMAIL_APP_PASSWORD=enc:b7522c...:8a2d2c...:10280f...
-```
-
-#### Step 5 — Restart the backend
-
-```bash
-cd backend && npm run dev
-```
-
-#### Step 6 — Open Meeting Notes
-
-Navigate to **Meeting Notes** in the sidebar. The default label is **Gemini Notes** — change it to whatever Gmail label you use, or type a custom one.
-
-#### Troubleshooting
-
-Hit `GET /api/gmail/test-config` (while logged in) to validate credentials:
-```
-http://localhost:3001/api/gmail/test-config
-```
-
-Returns `{ ok: true }` on success or an error message explaining what's wrong.
-
-If the label name isn't found, the error response lists all your available Gmail labels so you can click the right one directly in the UI.
-
----
-
-## Project Structure
-
-```
-the-manager/
-├── backend/
-│   ├── prisma/
-│   │   ├── schema.prisma      # SQLite schema
-│   │   └── dev.db             # SQLite database (gitignored)
-│   ├── src/
-│   │   ├── middleware/
-│   │   │   ├── auth.js
-│   │   │   ├── cipher.js      # AES-256-GCM encrypt/decrypt
-│   │   │   └── errorHandler.js
-│   │   └── routes/
-│   │       ├── ai.js          # AI suggestions + settings
-│   │       ├── auth.js
-│   │       ├── brainstorm.js
-│   │       ├── canvases.js
-│   │       ├── gmail.js       # Gmail IMAP integration
-│   │       ├── initiatives.js
-│   │       ├── notes.js
-│   │       └── users.js
-│   ├── setup-env.js           # One-time password encryption helper
-│   └── .env                   # NOT committed to git
-│
-└── frontend/
-    └── src/
-        ├── components/
-        │   ├── AISettingsDialog.jsx
-        │   ├── AIPriorityStrip.jsx
-        │   ├── AISuggestionsPanel.jsx
-        │   └── Layout.jsx
-        └── pages/
-            ├── Dashboard.jsx
-            ├── InitiativesList.jsx
-            ├── MeetingNotes.jsx
-            ├── MindMap.jsx
-            ├── Notes.jsx
-            ├── Setup.jsx
-            └── Tasks.jsx
-```
-
----
-
-## API Reference
-
-### Auth
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/auth/register` | Register |
-| POST | `/api/auth/login` | Login |
-| GET | `/api/auth/me` | Current user |
-
-### Initiatives
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/initiatives` | List all |
-| POST | `/api/initiatives` | Create |
-| PUT | `/api/initiatives/:id` | Update |
-| DELETE | `/api/initiatives/:id` | Delete |
-
-### AI
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/ai/suggestions` | Get AI priority suggestions |
-| GET | `/api/ai/settings` | Get current AI config |
-| PUT | `/api/ai/settings` | Save AI config |
-
-### Gmail
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/gmail/meeting-notes` | Fetch emails from a label |
-| GET | `/api/gmail/test-config` | Test IMAP credentials |
-
----
-
-## License
-
-MIT
-
-
-## Features
-
-- ✅ Hierarchical initiative tracking
-- ✅ Status and priority management
-- ✅ User authentication
-- ✅ Dashboard with analytics
-- ✅ List view with drill-down
-- 🔄 Mind map visualization (Phase 2)
-- 🔄 Links and attachments (Phase 3)
-- 🔄 Comments and activity logs (Phase 3)
-
-## Tech Stack
-
-### Backend
-- Node.js + Express
-- PostgreSQL + Prisma ORM
-- JWT Authentication
-
-### Frontend
-- React 18
-- Redux Toolkit
-- Material-UI
-- Vite
 
 ## Getting Started
 
-### Prerequisites
-- Node.js 18+ 
-- PostgreSQL 14+
-- npm or yarn
+### Desktop App (Recommended)
 
-### Installation
+1. Download the `.dmg` (macOS) or `.exe` (Windows) from Releases
+2. Install and launch — the app creates a local SQLite database automatically
+3. Register an account on first launch
+4. Optionally configure AI, Gmail, or JIRA from **Setup** in the sidebar
 
-1. **Clone the repository**
-```bash
-git clone <repository-url>
-cd mindmap
+## Configuration
+
+All integrations are configured from the **Setup** page in the app sidebar — no `.env` editing required for the desktop app.
+
+### AI Provider
+
+| Provider | Setup |
+|----------|-------|
+| **Ollama** (free, local) | Install from [ollama.com](https://ollama.com), pull a model (`ollama pull llama3.1`), select Ollama in Setup |
+| **Google Gemini** | Get API key from [AI Studio](https://aistudio.google.com/apikey), paste in Setup |
+| **OpenAI** | Get API key from [platform.openai.com](https://platform.openai.com/api-keys), paste in Setup |
+| **OpenAI-compatible** | Enter base URL, API key, and model name (works with Groq, Together AI, LM Studio, etc.) |
+| **Disabled** | Structural scoring still works; only LLM analysis is skipped |
+
+### Gmail (Meeting Notes)
+
+1. Enable 2-Step Verification on your Google account
+2. Generate an App Password at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
+3. Enter your email and app password in Setup → Gmail
+4. Set the Gmail label to fetch from (default: "Gemini Notes")
+
+### JIRA & Confluence
+
+1. Enter your Atlassian base URL (e.g. `https://yourteam.atlassian.net`)
+2. Enter your email and an [API token](https://id.atlassian.com/manage-profile/security/api-tokens)
+3. Link tickets/pages to initiatives from the detail drawer
+
+### Cloud Sync (Turso)
+
+1. Create a free database at [turso.tech](https://turso.tech)
+2. Enter the database URL and auth token in Setup → Sync
+3. Use the Push/Pull buttons in the sidebar to sync between machines
+
+---
+
+## Database Options
+
+### Desktop (Electron)
+The desktop app always uses a local SQLite file — no configuration needed. The file is created automatically at:
+- **macOS**: `~/Library/Application Support/one-desktop/app.db`
+- **Windows**: `%APPDATA%\one-desktop\app.db`
+
+### Web / Docker
+Set one of these environment variables in your `.env` or `docker-compose.yml`:
+
+| Database | Variable | Example value |
+|----------|----------|---------------|
+| **Turso** (managed cloud SQLite) | `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` | `libsql://your-db.turso.io` |
+| **Self-hosted libsql server** ([sqld](https://github.com/tursodatabase/sqld)) | `TURSO_DATABASE_URL` | `http://your-server:8080` |
+| **Local SQLite file** (on the server/container) | `DATABASE_URL` | `file:/data/app.db` |
+
+`TURSO_DATABASE_URL` takes priority. If it is not set, `DATABASE_URL` is used. For the local file option in Docker, mount a volume so data persists across container restarts:
+
+```yaml
+volumes:
+  - ./data:/data
+environment:
+  DATABASE_URL: file:/data/app.db
 ```
 
-2. **Backend Setup**
-```bash
-cd backend
-npm install
+No code or schema changes are needed to switch between these options — the driver handles all three transparently.
 
-# Create .env file
-cp .env.example .env
-# Edit .env with your database credentials
+### PostgreSQL
+PostgreSQL is not supported out of the box. Adding it would require a second Prisma schema (`provider = "postgresql"`) and a different adapter (`@prisma/adapter-pg`). The existing SQLite/Turso schema stays unchanged.
 
-# Run migrations
-npx prisma migrate dev
-npx prisma generate
-
-# Start backend server
-npm run dev
-```
-
-The backend will run on http://localhost:3001
-
-3. **Frontend Setup**
-```bash
-cd frontend
-npm install
-
-# Start frontend
-npm run dev
-```
-
-The frontend will run on http://localhost:5173
-
-### Database Setup
-
-Create a PostgreSQL database:
-```sql
-CREATE DATABASE initiative_tracker;
-```
-
-Update your `.env` file with the database URL:
-```
-DATABASE_URL="postgresql://username:password@localhost:5432/initiative_tracker?schema=public"
-```
-
-Run Prisma migrations:
-```bash
-cd backend
-npx prisma migrate dev
-```
-
-## Usage
-
-1. Navigate to http://localhost:5173
-2. Register a new account
-3. Login with your credentials
-4. Start creating initiatives!
-
-### Creating Initiatives
-
-1. Click "New Initiative" button
-2. Fill in the title, description, type, priority
-3. Click "Create"
-4. Initiatives can have sub-initiatives (hierarchical structure)
-
-### Managing Status & Priority
-
-- Use the dropdown menus directly on each initiative card
-- Status: Open, In Progress, Blocked, On Hold, Completed, Cancelled
-- Priority: Critical, High, Medium, Low
-
-## API Endpoints
-
-### Authentication
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - Login
-- `GET /api/auth/me` - Get current user
-
-### Initiatives
-- `GET /api/initiatives` - Get all initiatives
-- `GET /api/initiatives/:id` - Get single initiative
-- `POST /api/initiatives` - Create initiative
-- `PUT /api/initiatives/:id` - Update initiative
-- `DELETE /api/initiatives/:id` - Delete initiative
-- `PATCH /api/initiatives/:id/status` - Update status
-- `PATCH /api/initiatives/:id/priority` - Update priority
-- `GET /api/initiatives/:id/children` - Get child initiatives
-
-## Development
-
-### Project Structure
-
-```
-backend/
-├── prisma/
-│   └── schema.prisma
-├── src/
-│   ├── middleware/
-│   ├── routes/
-│   └── server.js
-└── package.json
-
-frontend/
-├── src/
-│   ├── api/
-│   ├── components/
-│   ├── features/
-│   ├── pages/
-│   ├── App.jsx
-│   └── main.jsx
-└── package.json
-```
-
-### Running Tests
-
-```bash
-# Backend tests (when added)
-cd backend
-npm test
-
-# Frontend tests (when added)
-cd frontend
-npm test
-```
-
-## Next Steps (Upcoming Phases)
-
-### Phase 2: Mind Map Visualization
-- React Flow integration
-- Visual node representation
-- Drag & drop positioning
-
-### Phase 3: Enhanced Features
-- Link management
-- Comments system
-- Activity logs
-- Search & filters
-
-### Phase 4: Analytics
-- Progress tracking
-- Dashboard metrics
-- Next priority queue
-
-### Phase 5: Polish
-- Performance optimization
-- Export functionality
-- Keyboard shortcuts
-
-### Phase 6: Desktop App
-- PWA implementation
-- Offline support
-- Optional Electron wrapper
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+---
 
 ## License
 
 MIT
-
-## Support
-
-For issues and questions, please create an issue in the repository.

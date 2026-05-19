@@ -1,6 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import fs from 'fs';
 import authRoutes from './routes/auth.js';
 import initiativeRoutes from './routes/initiatives.js';
 import userRoutes from './routes/users.js';
@@ -12,6 +15,8 @@ import gmailRoutes from './routes/gmail.js';
 import meetingNotesRoutes from './routes/meeting-notes.js';
 import jiraRoutes from './routes/jira.js';
 import integrationsRoutes from './routes/integrations.js';
+import syncRoutes from './routes/sync.js';
+import featuresRoutes from './routes/features.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { prisma } from './lib/prisma.js';
 
@@ -48,11 +53,26 @@ app.use('/api/gmail', gmailRoutes);
 app.use('/api/meeting-notes', meetingNotesRoutes);
 app.use('/api/jira', jiraRoutes);
 app.use('/api/integrations', integrationsRoutes);
+app.use('/api/sync', syncRoutes);
+app.use('/api/features', featuresRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Serve the React frontend when running as a standalone web server (Docker / production).
+// The `public/` folder is populated at Docker build time from the Vite build output.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// In Docker: working dir is /app, so public/ lives at /app/public (one level above src/)
+const publicDir = path.resolve(__dirname, '../public');
+if (fs.existsSync(publicDir)) {
+  app.use(express.static(publicDir));
+  // SPA fallback — serve index.html for any non-API route
+  app.get(/^(?!\/api).*/, (req, res) => {
+    res.sendFile(path.join(publicDir, 'index.html'));
+  });
+}
 
 // Error handling
 app.use(errorHandler);

@@ -4,10 +4,12 @@ import {
   Box, Typography, Button, IconButton, TextField, Chip,
   CircularProgress, Divider, Tooltip, InputAdornment,
   Dialog, DialogTitle, DialogContent, DialogActions,
+  Menu, MenuItem,
 } from '@mui/material';
 import {
   Add, Delete, Lock, LockOpen, LockOutlined, Search, Clear,
   NoteAlt, CheckCircle, ChevronRight, ExpandMore, SubdirectoryArrowRight,
+  Dashboard,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import api from '../api/axios';
@@ -240,11 +242,12 @@ function NoteUnlockDialog({ note, open, onClose, onUnlocked }) {
   );
 }
 // ── NoteTreeItem — renders one node and its children recursively ───────────────
-function NoteTreeItem({ note, depth, selectedId, onSelect, onAddChild, expandedIds, onToggle, canvases }) {
+function NoteTreeItem({ note, depth, selectedId, onSelect, onAddChild, expandedIds, onToggle, canvases, onAssignCanvas }) {
   const isExpanded = expandedIds.has(note.id);
   const hasChildren = note.children?.length > 0;
   const active = selectedId === note.id;
   const canvas = depth === 0 ? canvases.find(c => c.id === note.canvasId) : null;
+  const [canvasAnchor, setCanvasAnchor] = useState(null);
 
   return (
     <>
@@ -304,6 +307,19 @@ function NoteTreeItem({ note, depth, selectedId, onSelect, onAddChild, expandedI
           )}
         </Box>
 
+        {/* Canvas assign button — revealed on hover, root notes only */}
+        {depth === 0 && (
+          <Tooltip title={canvas ? `Canvas: ${canvas.name} — click to change` : 'Assign to canvas'} placement="right">
+            <IconButton
+              className="note-add-btn"
+              size="small"
+              onClick={e => { e.stopPropagation(); setCanvasAnchor(e.currentTarget); }}
+              sx={{ opacity: 0, transition: 'opacity 0.15s', p: 0.3, color: canvas ? canvas.color : '#94a3b8', flexShrink: 0 }}
+            >
+              <Dashboard sx={{ fontSize: 13 }} />
+            </IconButton>
+          </Tooltip>
+        )}
         {/* Add-child button — revealed on hover */}
         <Tooltip title="Add child note" placement="right">
           <IconButton
@@ -317,12 +333,27 @@ function NoteTreeItem({ note, depth, selectedId, onSelect, onAddChild, expandedI
         </Tooltip>
       </Box>
 
+      {/* Canvas picker menu */}
+      <Menu anchorEl={canvasAnchor} open={!!canvasAnchor} onClose={() => setCanvasAnchor(null)}
+        PaperProps={{ sx: { borderRadius: 2, minWidth: 160 } }}>
+        <MenuItem dense onClick={() => { onAssignCanvas(note.id, null); setCanvasAnchor(null); }}>
+          <Typography variant="body2" color="text.secondary">None</Typography>
+        </MenuItem>
+        {canvases.map(c => (
+          <MenuItem key={c.id} dense onClick={() => { onAssignCanvas(note.id, c.id); setCanvasAnchor(null); }}
+            selected={note.canvasId === c.id}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: c.color, mr: 1, flexShrink: 0 }} />
+            <Typography variant="body2">{c.name}</Typography>
+          </MenuItem>
+        ))}
+      </Menu>
+
       {/* Recurse into children */}
       {isExpanded && hasChildren && note.children.map(child => (
         <NoteTreeItem
           key={child.id} note={child} depth={depth + 1}
           selectedId={selectedId} onSelect={onSelect} onAddChild={onAddChild}
-          expandedIds={expandedIds} onToggle={onToggle} canvases={canvases}
+          expandedIds={expandedIds} onToggle={onToggle} canvases={canvases} onAssignCanvas={onAssignCanvas}
         />
       ))}
     </>
@@ -364,6 +395,9 @@ export default function Notes() {
   // Delete confirm / creating
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [creating, setCreating] = useState(false);
+
+  // Canvas assignment menu
+  const [canvasMenuAnchor, setCanvasMenuAnchor] = useState(null);
 
   // ── Load settings ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -545,6 +579,16 @@ export default function Notes() {
     } catch (e) { console.error(e); }
   };
 
+  // ── Canvas assignment ────────────────────────────────────────────────────
+  const handleAssignCanvas = useCallback(async (noteId, canvasId) => {
+    setCanvasMenuAnchor(null);
+    try {
+      const r = await api.put(`/notes/${noteId}`, { canvasId: canvasId || null });
+      setAllNotes(prev => prev.map(n => n.id === noteId ? { ...n, canvasId: r.data.canvasId } : n));
+      setEditorNote(prev => prev?.id === noteId ? { ...prev, canvasId: r.data.canvasId } : prev);
+    } catch (e) { console.error(e); }
+  }, []);
+
   // ── Password management ────────────────────────────────────────────────────
   const handlePwSuccess = (step) => {
     if (step === 'set') { setHasPassword(true); setIsUnlocked(true); }
@@ -651,6 +695,7 @@ export default function Notes() {
                     expandedIds={expandedIds}
                     onToggle={toggleExpand}
                     canvases={canvases}
+                    onAssignCanvas={handleAssignCanvas}
                   />
                 ))
               )
@@ -677,6 +722,26 @@ export default function Notes() {
                   {saveState === 'saved'  && <><CheckCircle sx={{ fontSize: 14, color: '#22c55e' }} /><Typography variant="caption" color="text.disabled">Saved</Typography></>}
                   {saveState === 'error'  && <Typography variant="caption" color="error">Save failed</Typography>}
                 </Box>
+                {/* Canvas assignment */}
+                {(() => {
+                  const assignedCanvas = canvases.find(c => c.id === editorNote.canvasId);
+                  return (
+                    <Tooltip title={assignedCanvas ? `Canvas: ${assignedCanvas.name} — click to change` : 'Assign to canvas'}>
+                      <IconButton
+                        size="small"
+                      onClick={e => setCanvasMenuAnchor(e.currentTarget)}
+                        sx={{
+                          color: assignedCanvas ? assignedCanvas.color : 'text.disabled',
+                          bgcolor: assignedCanvas ? assignedCanvas.color + '18' : 'transparent',
+                          '&:hover': { bgcolor: assignedCanvas ? assignedCanvas.color + '30' : '#f0f4ff', color: assignedCanvas ? assignedCanvas.color : '#6366f1' },
+                          borderRadius: 1.5,
+                        }}
+                      >
+                        <Dashboard sx={{ fontSize: 17 }} />
+                      </IconButton>
+                    </Tooltip>
+                  );
+                })()}
                 <Tooltip title={editorNote.isProtected ? 'Remove protection' : 'Lock note (uses login password)'}>
                   <IconButton size="small" onClick={handleToggleLock}
                     sx={{ color: editorNote.isProtected ? '#6366f1' : 'text.disabled', '&:hover': { color: '#6366f1', bgcolor: '#f0f4ff' }, borderRadius: 1.5 }}>
@@ -830,6 +895,40 @@ export default function Notes() {
         onClose={() => setUnlockTarget(null)}
         onUnlocked={handleNoteUnlocked}
       />
+
+      {/* Canvas assignment menu */}
+      <Menu
+        anchorEl={canvasMenuAnchor}
+        open={!!canvasMenuAnchor}
+        onClose={() => setCanvasMenuAnchor(null)}
+        PaperProps={{ sx: { borderRadius: 2, minWidth: 200 } }}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+      >
+        <Typography variant="caption" color="text.disabled" fontWeight={700} sx={{ px: 2, pt: 1, pb: 0.5, display: 'block', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Assign to canvas
+        </Typography>
+        <Divider sx={{ mb: 0.5 }} />
+        <MenuItem
+          onClick={() => handleAssignCanvas(editorNote.id, null)}
+          selected={!editorNote?.canvasId}
+          sx={{ gap: 1, borderRadius: 1, mx: 0.5 }}
+        >
+          <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#94a3b8', flexShrink: 0 }} />
+          <Typography variant="body2">None</Typography>
+        </MenuItem>
+        {canvases.map(canvas => (
+          <MenuItem
+            key={canvas.id}
+            onClick={() => handleAssignCanvas(editorNote.id, canvas.id)}
+            selected={editorNote?.canvasId === canvas.id}
+            sx={{ gap: 1, borderRadius: 1, mx: 0.5 }}
+          >
+            <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: canvas.color, flexShrink: 0 }} />
+            <Typography variant="body2">{canvas.name}</Typography>
+          </MenuItem>
+        ))}
+      </Menu>
 
       {/* Delete confirm */}
       <Dialog open={deleteConfirm} onClose={() => setDeleteConfirm(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>

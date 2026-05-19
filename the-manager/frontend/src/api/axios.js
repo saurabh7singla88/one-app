@@ -33,6 +33,12 @@ api.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
+      // Don't reload on auth-endpoint failures (login/register) — let the
+      // page display the error message instead of refreshing it away.
+      const url = error.config?.url || '';
+      if (url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/forgot-password') || url.includes('/auth/reset-password')) {
+        return Promise.reject(error);
+      }
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       // Reload the page so Redux re-initialises from empty localStorage.

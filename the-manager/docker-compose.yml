@@ -1,0 +1,23 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # The frontend will call /api/* — nginx (or express static) proxies these
+        VITE_API_URL: /api
+    ports:
+      - "3000:47421"
+    environment:
+      NODE_ENV: production
+      # Turso runtime connection — required for web deployment
+      TURSO_DATABASE_URL: ${TURSO_DATABASE_URL}
+      TURSO_AUTH_TOKEN: ${TURSO_AUTH_TOKEN}
+      # JWT secret for session tokens
+      JWT_SECRET: ${JWT_SECRET}
+      # Optional: encryption key for stored credentials
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      # Frontend is served by Express itself — allow same-origin requests from the mapped port.
+      # For production deployments replace with your real domain.
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+    restart: unless-stopped

@@ -26,12 +26,47 @@ function getResourcePath(...parts) {
 
 const userDataPath = app.getPath('userData');
 
-process.env.ELECTRON       = 'true';
-process.env.DATABASE_URL   = `file:${path.join(userDataPath, 'app.db')}`;
-process.env.PORT            = '47421';
-process.env.NODE_ENV        = isDev ? 'development' : 'production';
-process.env.ALLOWED_ORIGINS = isDev ? 'http://localhost:5173' : 'file://';
-process.env.SERVER_LOG_PATH = path.join(userDataPath, 'server.log');
+// ─── Migrate data from old "the-manager-desktop" location if this is first launch
+try {
+  const oldPath = path.join(path.dirname(userDataPath), 'the-manager-desktop');
+  const oldDb = path.join(oldPath, 'app.db');
+  const newDb = path.join(userDataPath, 'app.db');
+  if (oldPath !== userDataPath && existsSync(oldDb)) {
+    const fs = require('fs');
+    const oldSize = fs.statSync(oldDb).size;
+    const newSize = existsSync(newDb) ? fs.statSync(newDb).size : 0;
+    // Migrate if new DB doesn't exist, or is smaller (likely an empty auto-created DB)
+    if (!existsSync(newDb) || (oldSize > newSize)) {
+      mkdirSync(userDataPath, { recursive: true });
+      fs.copyFileSync(oldDb, newDb);
+      for (const f of ['app.db-journal', 'app.db-wal', 'turso.json', 'jwt-secret']) {
+        if (existsSync(path.join(oldPath, f)))
+          fs.copyFileSync(path.join(oldPath, f), path.join(userDataPath, f));
+      }
+      console.log('Migrated data from "the-manager-desktop" to new location');
+    }
+  }
+} catch (e) {
+  console.error('Data migration from old location failed (non-fatal):', e.message);
+}
+
+process.env.ELECTRON         = 'true';
+process.env.DATABASE_URL     = `file:${path.join(userDataPath, 'app.db')}`;
+process.env.TURSO_CONFIG_DIR = userDataPath;
+process.env.PORT             = '47421';
+process.env.NODE_ENV         = isDev ? 'development' : 'production';
+process.env.ALLOWED_ORIGINS  = isDev ? 'http://localhost:5173' : 'file://';
+process.env.SERVER_LOG_PATH  = path.join(userDataPath, 'server.log');
+
+// Load Turso credentials from persisted config file if present
+try {
+  const tursoConfigFile = path.join(userDataPath, 'turso.json');
+  if (existsSync(tursoConfigFile)) {
+    const tursoConfig = JSON.parse(require('fs').readFileSync(tursoConfigFile, 'utf8'));
+    if (tursoConfig.databaseUrl)  process.env.TURSO_DATABASE_URL = tursoConfig.databaseUrl;
+    if (tursoConfig.authToken)    process.env.TURSO_AUTH_TOKEN   = tursoConfig.authToken;
+  }
+} catch (_) { /* ignore — fall back to local-only SQLite */ }
 
 // JWT_SECRET: generate a stable per-device secret persisted in userData
 // In a real release you would derive this from a secure keychain entry.
@@ -96,7 +131,7 @@ function createWindow() {
     height: 900,
     minWidth: 900,
     minHeight: 600,
-    title: 'The Manager',
+    title: 'One',
     show: false,               // avoid white flash — show once ready-to-show
     backgroundColor: '#f8fafc', // match app background so flash is invisible
     webPreferences: {
@@ -168,7 +203,7 @@ app.whenReady().then(async () => {
       mkdirSync(userDataPath, { recursive: true });
       const logPath = path.join(userDataPath, 'error.log');
       writeFileSync(logPath, `[${new Date().toISOString()}]\n${err?.stack || String(err)}\n`);
-      dialog.showErrorBox('The Manager — startup error', `${err?.message || String(err)}\n\nDetails written to:\n${logPath}`);
+      dialog.showErrorBox('One — startup error', `${err?.message || String(err)}\n\nDetails written to:\n${logPath}`);
     } catch (_) { /* ignore secondary errors */ }
     app.quit();
   }

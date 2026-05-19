@@ -142,7 +142,8 @@ export default function RephraseTool({ text, onApply, disabled, size = 'small', 
           <Box sx={{ px: 2, py: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <CircularProgress size={16} sx={{ color: '#6366f1' }} />
             <Typography variant="body2" color="text.secondary">
-              {STYLES.find(s => s.key === loadingStyle)?.label || 'Rephrasing…'}
+              {STYLES.find(s => s.key === loadingStyle)?.label || 'Rephrasing…'}&nbsp;
+              <Typography component="span" variant="caption" color="text.disabled">(may retry…)</Typography>
             </Typography>
           </Box>
         )}

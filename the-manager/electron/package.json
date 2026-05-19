@@ -1,7 +1,7 @@
 {
-  "name": "the-manager-desktop",
+  "name": "one-desktop",
   "version": "1.0.0",
-  "description": "The Manager — desktop wrapper",
+  "description": "One — desktop wrapper",
   "main": "main.js",
   "type": "module",
   "scripts": {
@@ -9,15 +9,15 @@
     "postinstall": "prisma generate --schema=../backend/prisma/schema.prisma && node -e \"const {cpSync}=require('fs');cpSync('../backend/node_modules/@prisma/client','./node_modules/@prisma/client',{recursive:true,force:true});cpSync('../backend/node_modules/.prisma','./node_modules/.prisma',{recursive:true,force:true});console.log('Prisma client synced to electron/node_modules')\"",
     "sync:prisma": "node -e \"const {cpSync}=require('fs');cpSync('../backend/node_modules/@prisma/client','./node_modules/@prisma/client',{recursive:true,force:true});cpSync('../backend/node_modules/.prisma','./node_modules/.prisma',{recursive:true,force:true});console.log('Prisma client synced')\"",
     "build:frontend": "cd ../frontend && npm run build",
-    "sign:mac": "codesign --deep --force --sign - --entitlements entitlements.plist 'dist/mac-arm64/The Manager.app' && codesign --deep --force --sign - --entitlements entitlements.plist 'dist/mac/The Manager.app' 2>/dev/null || true",
-    "dmg:mac": "hdiutil create -volname 'The Manager' -srcfolder 'dist/mac-arm64/The Manager.app' -ov -format UDZO 'dist/The Manager-arm64-signed.dmg' && echo 'DMG rebuilt with signed app'",
+    "sign:mac": "codesign --deep --force --sign - --entitlements entitlements.plist 'dist/mac-arm64/One.app' && codesign --deep --force --sign - --entitlements entitlements.plist 'dist/mac/One.app' 2>/dev/null || true",
+    "dmg:mac": "hdiutil create -volname 'One' -srcfolder 'dist/mac-arm64/One.app' -ov -format UDZO 'dist/One-arm64-signed.dmg' && echo 'DMG rebuilt with signed app'",
     "build:mac": "cd ../backend && npx prisma generate && cd ../electron && npm run sync:prisma && npm run build:frontend && node -e \"require('esbuild').buildSync({entryPoints:['../backend/src/server.js'],bundle:true,platform:'node',target:'node20',format:'cjs',outfile:'./backend-bundle/server.bundle.cjs',external:['@prisma/client','.prisma/client','bcrypt'],minify:false})\" && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac && npm run sign:mac && npm run dmg:mac",
     "build:win": "cd ../backend && npx prisma generate && cd ../electron && npm run sync:prisma && npm run build:frontend && node -e \"require('esbuild').buildSync({entryPoints:['../backend/src/server.js'],bundle:true,platform:'node',target:'node20',format:'cjs',outfile:'./backend-bundle/server.bundle.cjs',external:['@prisma/client','.prisma/client','bcrypt'],minify:false})\" && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win",
     "build:win:installer": "npm run sync:prisma && npm run build:frontend && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --config.win.target=nsis"
   },
   "build": {
-    "appId": "com.themanager.app",
-    "productName": "The Manager",
+    "appId": "com.one.app",
+    "productName": "One",
     "copyright": "Copyright © 2026",
     "asar": false,
     "directories": {

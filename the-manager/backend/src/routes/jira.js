@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
+import { encrypt, decrypt } from '../middleware/cipher.js';
 import logger from '../lib/logger.js';
 
 const router = Router();
@@ -12,7 +13,9 @@ const SETTING_KEYS = ['jira_base_url', 'jira_email', 'jira_api_token'];
 async function loadJiraSettings() {
   const rows = await prisma.appSetting.findMany({ where: { key: { in: SETTING_KEYS } } });
   const map = {};
-  for (const row of rows) map[row.key] = row.value;
+  for (const row of rows) {
+    map[row.key] = row.key === 'jira_api_token' ? decrypt(row.value) : row.value;
+  }
   return map;
 }
 
@@ -86,8 +89,8 @@ router.put('/settings', async (req, res, next) => {
     if (apiToken) {
       upserts.push(prisma.appSetting.upsert({
         where: { key: 'jira_api_token' },
-        update: { value: apiToken },
-        create: { key: 'jira_api_token', value: apiToken },
+        update: { value: encrypt(apiToken) },
+        create: { key: 'jira_api_token', value: encrypt(apiToken) },
       }));
     }
 
@@ -306,6 +309,305 @@ router.get('/confluence/fetch', async (req, res, next) => {
   } catch (err) {
     if (err.name === 'AbortError') {
       return res.status(504).json({ error: 'Confluence request timed out.' });
+    }
+    next(err);
+  }
+});
+
+// ─── GET /api/jira/sprints?project=PROJ ──────────────────────────────────────
+// List sprints for a project via the Agile API (board auto-detected from project key).
+router.get('/sprints', async (req, res, next) => {
+  try {
+    const { project } = req.query;
+    if (!project?.trim()) {
+      return res.status(400).json({ error: 'Project key is required.' });
+    }
+
+    const settings = await loadJiraSettings();
+    if (!settings['jira_base_url'] || !settings['jira_email'] || !settings['jira_api_token']) {
+      return res.status(400).json({ error: 'JIRA is not configured.' });
+    }
+
+    const baseUrl = validateAtlassianBaseUrl(settings['jira_base_url']);
+    const credentials = Buffer.from(`${settings['jira_email']}:${settings['jira_api_token']}`).toString('base64');
+    const headers = { 'Authorization': `Basic ${credentials}`, 'Accept': 'application/json' };
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15_000);
+
+    try {
+      // Step 1: find boards for this project
+      const boardUrl = new URL(`${baseUrl}/rest/agile/1.0/board`);
+      boardUrl.searchParams.set('projectKeyOrId', project.trim().toUpperCase());
+      boardUrl.searchParams.set('maxResults', '10');
+
+      const boardRes = await fetch(boardUrl.toString(), { headers, signal: controller.signal });
+
+      if (boardRes.status === 401) return res.status(401).json({ error: 'JIRA authentication failed.' });
+      if (boardRes.status === 403) return res.status(403).json({ error: 'Access denied. Agile API may require Software project type.' });
+      if (!boardRes.ok) {
+        return res.status(502).json({ error: `Could not load boards (status ${boardRes.status}). This project may not have a board.` });
+      }
+
+      const boardData = await boardRes.json();
+      const boards = boardData.values || [];
+      if (boards.length === 0) {
+        return res.status(404).json({ error: 'No boards found for this project.' });
+      }
+
+      // Use the first board (prefer Scrum boards over Kanban)
+      const board = boards.find(b => b.type === 'scrum') || boards[0];
+
+      // Step 2: fetch sprints for that board
+      const sprintUrl = new URL(`${baseUrl}/rest/agile/1.0/board/${board.id}/sprint`);
+      sprintUrl.searchParams.set('state', 'active,future,closed');
+      sprintUrl.searchParams.set('maxResults', '50');
+
+      const sprintRes = await fetch(sprintUrl.toString(), { headers, signal: controller.signal });
+      if (!sprintRes.ok) {
+        return res.status(502).json({ error: `Could not load sprints (status ${sprintRes.status}).` });
+      }
+
+      const sprintData = await sprintRes.json();
+      const sprints = (sprintData.values || [])
+        .sort((a, b) => {
+          // active first, then future, then closed by start date desc
+          const order = { active: 0, future: 1, closed: 2 };
+          if (order[a.state] !== order[b.state]) return order[a.state] - order[b.state];
+          return new Date(b.startDate || 0) - new Date(a.startDate || 0);
+        })
+        .map(s => ({
+          id:        s.id,
+          name:      s.name,
+          state:     s.state,       // active | future | closed
+          startDate: s.startDate || null,
+          endDate:   s.endDate || null,
+        }));
+
+      res.json({ board: { id: board.id, name: board.name }, sprints });
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (err) {
+    if (err.name === 'AbortError') return res.status(504).json({ error: 'Request timed out.' });
+    next(err);
+  }
+});
+
+// ─── GET /api/jira/team ──────────────────────────────────────────────────────
+// Fetch issues for the team using JQL. Supports filtering by project, sprint, etc.
+// Query params:
+//   project  - JIRA project key (required)
+//   sprint   - sprint name or "active" (optional, defaults to active sprint)
+//   maxResults - max issues to return (optional, defaults to 100)
+router.get('/team', async (req, res, next) => {
+  try {
+    const { project, sprint, maxResults = 100 } = req.query;
+
+    if (!project?.trim()) {
+      return res.status(400).json({ error: 'Project key is required. Pass ?project=PROJ' });
+    }
+
+    // Validate project key format
+    if (!/^[A-Z][A-Z0-9_]+$/i.test(project.trim())) {
+      return res.status(400).json({ error: 'Invalid project key format.' });
+    }
+
+    const settings = await loadJiraSettings();
+    if (!settings['jira_base_url'] || !settings['jira_email'] || !settings['jira_api_token']) {
+      return res.status(400).json({ error: 'JIRA is not configured. Please set up JIRA credentials in Settings.' });
+    }
+
+    const baseUrl = validateAtlassianBaseUrl(settings['jira_base_url']);
+    const credentials = Buffer.from(`${settings['jira_email']}:${settings['jira_api_token']}`).toString('base64');
+
+    const cap = Math.min(Math.max(parseInt(maxResults, 10) || 100, 1), 200);
+
+    // Discover the "Story Points" field ID dynamically from this Jira instance
+    let spFieldId = null;
+    try {
+      const fieldsRes = await fetch(`${baseUrl}/rest/api/3/field`, {
+        headers: { 'Authorization': `Basic ${credentials}`, 'Accept': 'application/json' },
+      });
+      if (fieldsRes.ok) {
+        const allFields = await fieldsRes.json();
+        const spField = allFields.find(f =>
+          f.name?.toLowerCase() === 'story points' ||
+          f.name?.toLowerCase() === 'story point estimate'
+        );
+        if (spField) spFieldId = spField.id;
+      }
+    } catch (_) { /* non-fatal — fall back to known candidates */ }
+
+    // Fallback candidates if dynamic lookup failed
+    const SP_FIELDS = spFieldId
+      ? [spFieldId]
+      : ['customfield_10016', 'customfield_10028', 'customfield_10014', 'customfield_10004'];
+
+    const FIELDS = `summary,status,priority,assignee,issuetype,updated,labels,components,${SP_FIELDS.join(',')},timeoriginalestimate,timeestimate`;
+
+    // Helper: execute a JQL search and return the raw fetch response
+    const doSearch = async (jql) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30_000); // extra time for changelog
+      try {
+        const searchUrl = new URL(`${baseUrl}/rest/api/3/search/jql`);
+        searchUrl.searchParams.set('jql', jql);
+        searchUrl.searchParams.set('maxResults', String(cap));
+        searchUrl.searchParams.set('fields', FIELDS);
+        searchUrl.searchParams.set('expand', 'changelog');
+        return await fetch(searchUrl.toString(), {
+          headers: { 'Authorization': `Basic ${credentials}`, 'Accept': 'application/json' },
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
+    // Build JQL — prefer sprint-based filtering, fall back to unresolved if not supported
+    let jql;
+    let usedFallback = false;
+
+    if (sprint === 'active' || sprint === '') {
+      jql = `project = "${project.trim()}" AND sprint in openSprints() ORDER BY assignee ASC, priority DESC, updated DESC`;
+    } else {
+      jql = `project = "${project.trim()}" AND sprint = "${sprint.trim()}" ORDER BY assignee ASC, priority DESC, updated DESC`;
+    }
+
+    let jiraRes = await doSearch(jql);
+
+    // 410 = sprint JQL function not available (Kanban / no Software license)
+    // 400 = JQL syntax rejected — also fall back
+    if ((jiraRes.status === 410 || jiraRes.status === 400) && (sprint === 'active' || sprint === '')) {
+      usedFallback = true;
+      jql = `project = "${project.trim()}" AND statusCategory != Done ORDER BY assignee ASC, priority DESC, updated DESC`;
+      jiraRes = await doSearch(jql);
+    }
+
+    if (jiraRes.status === 401) {
+      return res.status(401).json({ error: 'JIRA authentication failed.' });
+    }
+    if (jiraRes.status === 403) {
+      return res.status(403).json({ error: 'Access denied. Check your JIRA permissions.' });
+    }
+    if (!jiraRes.ok) {
+      const body = await jiraRes.text().catch(() => '');
+      logger.error('JIRA search error', { status: jiraRes.status, body: body.slice(0, 300) });
+      return res.status(502).json({ error: `JIRA API returned status ${jiraRes.status}` });
+    }
+
+    const data = await jiraRes.json();
+    const issues = (data.issues || []).map(issue => {
+      const f = issue.fields || {};
+
+      // Build contributors: everyone who was ever assigned (from changelog) + current assignee
+      const contributorsMap = new Map();
+
+      // Past assignees from changelog (oldest first so current assignee wins on overwrite)
+      const histories = issue.changelog?.histories || [];
+      for (const history of histories) {
+        for (const item of (history.items || [])) {
+          if (item.field === 'assignee' && item.toString) {
+            const id = item.to || item.toString;
+            if (id && !contributorsMap.has(id)) {
+              contributorsMap.set(id, {
+                name: item.toString,
+                avatar: null,
+                accountId: item.to || null,
+                role: 'past',
+              });
+            }
+          }
+        }
+      }
+
+      // Current assignee (overwrites past entry if they're reassigned back)
+      if (f.assignee) {
+        const id = f.assignee.accountId || f.assignee.displayName;
+        contributorsMap.set(id, {
+          name:      f.assignee.displayName,
+          avatar:    f.assignee.avatarUrls?.['32x32'] || null,
+          accountId: f.assignee.accountId || null,
+          role:      'current',
+        });
+      }
+
+      // If nobody ever touched it, treat as Unassigned
+      const contributors = contributorsMap.size > 0
+        ? Array.from(contributorsMap.values())
+        : [{ name: 'Unassigned', avatar: null, accountId: null, role: 'current' }];
+
+      return {
+        key:        issue.key,
+        url:        `${baseUrl}/browse/${issue.key}`,
+        summary:    f.summary || '',
+        status:     f.status?.name || '',
+        statusCategory: f.status?.statusCategory?.name || '',
+        priority:   f.priority?.name || '',
+        priorityId: f.priority?.id || null,
+        issueType:  f.issuetype?.name || '',
+        assignee:   f.assignee?.displayName || 'Unassigned',
+        assigneeAvatar: f.assignee?.avatarUrls?.['32x32'] || null,
+        assigneeId: f.assignee?.accountId || null,
+        contributors,
+        labels:     f.labels || [],
+        components: (f.components || []).map(c => c.name),
+        storyPoints: SP_FIELDS.reduce((v, k) => v ?? (f[k] != null ? Number(f[k]) : null), null),
+        originalEstimate: f.timeoriginalestimate || null,
+        remainingEstimate: f.timeestimate || null,
+        updated:    f.updated || null,
+      };
+    });
+
+    // Group by ALL contributors (current + past), so a ticket appears under everyone who touched it
+    const teamMap = {};
+    for (const issue of issues) {
+      for (const contributor of issue.contributors) {
+        const name = contributor.name;
+        if (!teamMap[name]) {
+          teamMap[name] = {
+            name,
+            avatar:     contributor.avatar,
+            accountId:  contributor.accountId,
+            issues:     [],
+            totalStoryPoints: 0,
+            issueCount: 0,
+          };
+        }
+        // Store the role (current/past) alongside the issue for this person
+        teamMap[name].issues.push({ ...issue, myRole: contributor.role });
+        teamMap[name].issueCount += 1;
+        // Only count story points once — for the current assignee
+        if (contributor.role === 'current' && issue.storyPoints) {
+          teamMap[name].totalStoryPoints += issue.storyPoints;
+        }
+      }
+    }
+
+    const team = Object.values(teamMap).sort((a, b) => {
+      if (a.name === 'Unassigned') return 1;
+      if (b.name === 'Unassigned') return -1;
+      return a.name.localeCompare(b.name);
+    });
+
+    // Detect which SP field was actually populated (for debugging)
+    const spFieldUsed = spFieldId ||
+      (issues.length > 0
+        ? SP_FIELDS.find(k => data.issues[0]?.fields?.[k] != null) || null
+        : null);
+
+    res.json({
+      total: data.total || issues.length,
+      returned: issues.length,
+      jql,
+      sprintFallback: usedFallback,
+      spFieldUsed,
+      team,
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      return res.status(504).json({ error: 'JIRA request timed out.' });
     }
     next(err);
   }

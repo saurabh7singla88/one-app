@@ -448,7 +448,7 @@ export default function Help() {
           </Typography>
         </Box>
         <Typography variant="body2" sx={{ color: '#c7d2fe', lineHeight: 1.75, maxWidth: 560 }}>
-          <strong style={{ color: '#fff' }}>The Manager</strong> is an AI-assisted initiative tracker built for VPs and senior managers. Track projects, tasks, notes, and meeting outcomes — all with optional AI analysis powered by Ollama, OpenAI, or Gemini.
+          <strong style={{ color: '#fff' }}>One</strong> is an AI-assisted initiative tracker built for senior managers to track projects, tasks, notes, and meeting outcomes — all with optional AI analysis powered by Ollama, OpenAI, or Gemini.
         </Typography>
         <Box display="flex" flexWrap="wrap" gap={0.75} mt={2}>
           {FEATURES.map(f => (
