@@ -169,6 +169,7 @@ function MindMapInner() {
   const [selectedRootId, setSelectedRootId] = useState(null);
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
   const splitPanelRef = useRef(null);
 
   const toggleFullscreen = useCallback(() => {
@@ -376,21 +377,28 @@ function MindMapInner() {
 
   // Client-side canvas filter (belt-and-suspenders in case API returns stale/unfiltered data)
   const displayItems = useMemo(() => {
-    if (!activeCanvasId) return allItems;
-    // Include items directly on this canvas plus any descendants (tasks/subtasks under them)
-    const inCanvas = new Set(allItems.filter(i => i.canvasId === activeCanvasId).map(i => i.id));
+    // Exclude standalone tasks — they belong on the Tasks page, not the mind map
+    const initiatives = allItems.filter(i => !i.isStandaloneTask);
+    // Hide completed/cancelled unless the user opts in
+    const statusFiltered = showCompleted
+      ? initiatives
+      : initiatives.filter(i => i.status !== 'COMPLETED' && i.status !== 'CANCELLED');
+
+    if (!activeCanvasId) return statusFiltered;
+    // Include items directly on this canvas plus any descendants
+    const inCanvas = new Set(statusFiltered.filter(i => i.canvasId === activeCanvasId).map(i => i.id));
     let changed = true;
     while (changed) {
       changed = false;
-      allItems.forEach(i => {
+      statusFiltered.forEach(i => {
         if (!inCanvas.has(i.id) && i.parentId && inCanvas.has(i.parentId)) {
           inCanvas.add(i.id);
           changed = true;
         }
       });
     }
-    return allItems.filter(i => inCanvas.has(i.id));
-  }, [allItems, activeCanvasId]);
+    return statusFiltered.filter(i => inCanvas.has(i.id));
+  }, [allItems, activeCanvasId, showCompleted]);
 
   // Build children map (memoised)
   const childrenOf = useMemo(() => {
@@ -823,6 +831,14 @@ function MindMapInner() {
                   {isFullscreen ? <FullscreenExit fontSize="small" /> : <Fullscreen fontSize="small" />}
                 </IconButton>
               </Tooltip>
+              <Chip
+                label={showCompleted ? 'Hiding completed' : 'Show completed'}
+                size="small"
+                onClick={() => setShowCompleted(v => !v)}
+                color={showCompleted ? 'primary' : 'default'}
+                variant={showCompleted ? 'filled' : 'outlined'}
+                sx={{ cursor: 'pointer', fontWeight: 500 }}
+              />
               <Button
                 variant="outlined"
                 startIcon={<ListIcon />}

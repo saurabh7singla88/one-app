@@ -1,0 +1,13 @@
+{
+  "name": "the-manager",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "docker:up":      "docker compose up -d",
+    "docker:down":    "docker compose down",
+    "docker:build":   "docker compose up --build -d",
+    "docker:restart": "docker compose restart",
+    "docker:logs":    "docker compose logs -f --tail=50",
+    "docker:ps":      "docker compose ps"
+  }
+}
