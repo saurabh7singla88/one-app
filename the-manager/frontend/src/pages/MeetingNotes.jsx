@@ -255,6 +255,14 @@ export default function MeetingNotes() {
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [actionError, setActionError] = useState(null);
 
+  // first-visit setup banner — dismissed per-browser via localStorage
+  const SETUP_KEY = 'meeting_notes_setup_seen';
+  const [showSetupBanner, setShowSetupBanner] = useState(() => !localStorage.getItem(SETUP_KEY));
+  const dismissSetupBanner = () => {
+    localStorage.setItem(SETUP_KEY, '1');
+    setShowSetupBanner(false);
+  };
+
   // save-to-initiative state
   const [initiatives, setInitiatives] = useState([]);
   const [savedNotesMap, setSavedNotesMap] = useState({}); // { [messageId]: savedNote }
@@ -603,6 +611,41 @@ export default function MeetingNotes() {
 
       {/* ── Right panel ────────────────────────────────────────────────────── */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+        {/* ── First-visit setup banner ──────────────────────────────────────── */}
+        {showSetupBanner && (
+          <Box sx={{
+            mx: 3, mt: 2.5, mb: 0,
+            p: 2, borderRadius: 2.5,
+            bgcolor: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            display: 'flex', alignItems: 'flex-start', gap: 1.5,
+            flexShrink: 0,
+          }}>
+            <Box sx={{ fontSize: '1.3rem', lineHeight: 1, flexShrink: 0, mt: 0.1 }}>📬</Box>
+            <Box flex={1}>
+              <Typography fontWeight={700} sx={{ fontSize: '0.9rem', color: '#1d4ed8', mb: 0.4 }}>
+                Setting up Meeting Notes
+              </Typography>
+              <Typography sx={{ fontSize: '0.8rem', color: '#3b82f6', lineHeight: 1.6 }}>
+                Meeting Notes pulls emails from a Gmail label and uses AI to extract action items.
+                To get started:
+              </Typography>
+              <Box component="ol" sx={{ m: 0, mt: 0.75, pl: 2.5, fontSize: '0.8rem', color: '#1e40af', lineHeight: 1.9 }}>
+                <li>Go to <strong>Setup → Gmail</strong> and connect your Google account.</li>
+                <li>Create a Gmail label (e.g. <em>"Gemini Notes"</em>) and apply it to meeting emails.</li>
+                <li>Optionally configure an AI provider in <strong>Setup → AI Model</strong> for action-item extraction.</li>
+                <li>Come back here, pick a date and label, and hit <strong>Refresh</strong>.</li>
+              </Box>
+            </Box>
+            <Tooltip title="Dismiss">
+              <IconButton size="small" onClick={dismissSetupBanner} sx={{ color: '#93c5fd', flexShrink: 0, mt: -0.25 }}>
+                <CheckCircle sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        )}
+
         {!selected ? (
           <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="100%" gap={2}>
             <Email sx={{ fontSize: 64, color: '#e2e8f0' }} />

@@ -9,7 +9,7 @@ import {
 import {
   BookmarkBorder, Folder as FolderIcon, FolderOpen, Add, Search,
   ExpandMore, ChevronRight, Delete, Edit, OpenInNew, ContentCopy,
-  Close, MoreVert, Inbox, Refresh,
+  Close, MoreVert, Inbox, Refresh, ViewModule, ViewList,
 } from '@mui/icons-material';
 import {
   fetchFolders, createFolder, updateFolder, deleteFolder,
@@ -189,6 +189,77 @@ function BookmarkCard({ bookmark, onEdit, onDelete, onCopy }) {
   );
 }
 
+// ── Bookmark list row ────────────────────────────────────────────────────────
+function BookmarkRow({ bookmark, onEdit, onDelete, onCopy }) {
+  const [hovered, setHovered] = useState(false);
+  let domain = '';
+  try { domain = new URL(bookmark.url).hostname.replace('www.', ''); } catch {}
+
+  return (
+    <Box
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={() => window.open(bookmark.url, '_blank', 'noopener')}
+      sx={{
+        display: 'flex', alignItems: 'center', gap: 1.5,
+        px: 2, py: 1.25, cursor: 'pointer',
+        borderBottom: '1px solid #f1f5f9',
+        bgcolor: hovered ? '#fafafe' : 'white',
+        transition: 'background 0.1s',
+        '&:last-child': { borderBottom: 0 },
+      }}
+    >
+      {/* Favicon */}
+      {bookmark.favicon
+        ? <Box component="img" src={bookmark.favicon} alt="" sx={{ width: 16, height: 16, borderRadius: 0.5, flexShrink: 0, objectFit: 'contain' }} onError={e => { e.target.style.display = 'none'; }} />
+        : <BookmarkBorder sx={{ fontSize: 16, color: '#94a3b8', flexShrink: 0 }} />
+      }
+
+      {/* Title */}
+      <Typography fontWeight={600} sx={{ fontSize: '0.83rem', color: '#111827', minWidth: 180, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>
+        {bookmark.title}
+      </Typography>
+
+      {/* Domain */}
+      <Typography sx={{ fontSize: '0.73rem', color: '#6366f1', minWidth: 100, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>
+        {domain}
+      </Typography>
+
+      {/* Description */}
+      <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: { xs: 'none', md: 'block' } }}>
+        {bookmark.description || ''}
+      </Typography>
+
+      {/* Tags */}
+      <Box display="flex" gap={0.4} flexShrink={0} sx={{ display: { xs: 'none', lg: 'flex' } }}>
+        {bookmark.tags?.slice(0, 3).map(t => (
+          <Chip key={t} label={t} size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: '#f0f9ff', color: '#0369a1', '& .MuiChip-label': { px: 0.6 } }} />
+        ))}
+      </Box>
+
+      {/* Folder dot */}
+      {bookmark.folder && (
+        <Box display="flex" alignItems="center" gap={0.4} flexShrink={0} sx={{ display: { xs: 'none', sm: 'flex' } }}>
+          <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: bookmark.folder.color || '#6366f1' }} />
+          <Typography sx={{ fontSize: '0.65rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>{bookmark.folder.name}</Typography>
+        </Box>
+      )}
+
+      {/* Date */}
+      <Typography sx={{ fontSize: '0.65rem', color: '#d1d5db', flexShrink: 0, minWidth: 50, textAlign: 'right', display: { xs: 'none', sm: 'block' } }}>
+        {new Date(bookmark.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+      </Typography>
+
+      {/* Hover actions */}
+      <Box onClick={e => e.stopPropagation()} sx={{ display: 'flex', gap: 0.25, flexShrink: 0, opacity: hovered ? 1 : 0, transition: 'opacity 0.15s' }}>
+        <Tooltip title="Copy URL" arrow><IconButton size="small" onClick={() => onCopy(bookmark.url)} sx={{ p: 0.4 }}><ContentCopy sx={{ fontSize: 13, color: '#64748b' }} /></IconButton></Tooltip>
+        <Tooltip title="Edit" arrow><IconButton size="small" onClick={() => onEdit(bookmark)} sx={{ p: 0.4 }}><Edit sx={{ fontSize: 13, color: '#64748b' }} /></IconButton></Tooltip>
+        <Tooltip title="Delete" arrow><IconButton size="small" onClick={() => onDelete(bookmark)} sx={{ p: 0.4 }}><Delete sx={{ fontSize: 13, color: '#ef4444' }} /></IconButton></Tooltip>
+      </Box>
+    </Box>
+  );
+}
+
 // ── Add/Edit Bookmark Dialog ──────────────────────────────────────────────────
 function BookmarkDialog({ open, onClose, onSave, initial, folders }) {
   const [form, setForm] = useState({ url: '', title: '', description: '', folderId: '', tags: [] });
@@ -318,6 +389,7 @@ export default function Bookmarks() {
   const [folderDialog, setFolderDialog] = useState(null); // null | { parentId, existing }
   const [folderName, setFolderName] = useState('');
   const [snackbar, setSnackbar] = useState('');
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('bookmarks_view') || 'grid');
 
   // Load
   useEffect(() => { dispatch(fetchFolders()); }, [dispatch]);
@@ -478,6 +550,22 @@ export default function Bookmarks() {
             }}
           />
 
+          {/* View toggle */}
+          <Box sx={{ display: 'flex', border: '1px solid #e5e7eb', borderRadius: 1.5, overflow: 'hidden', flexShrink: 0 }}>
+            <Tooltip title="Grid view">
+              <IconButton size="small" onClick={() => { setViewMode('grid'); localStorage.setItem('bookmarks_view','grid'); }}
+                sx={{ borderRadius: 0, px: 0.75, py: 0.5, bgcolor: viewMode === 'grid' ? '#ede9fe' : 'transparent', color: viewMode === 'grid' ? '#6366f1' : '#94a3b8' }}>
+                <ViewModule sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="List view">
+              <IconButton size="small" onClick={() => { setViewMode('list'); localStorage.setItem('bookmarks_view','list'); }}
+                sx={{ borderRadius: 0, px: 0.75, py: 0.5, bgcolor: viewMode === 'list' ? '#ede9fe' : 'transparent', color: viewMode === 'list' ? '#6366f1' : '#94a3b8' }}>
+                <ViewList sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+          </Box>
+
           {/* Add */}
           <Button variant="contained" startIcon={<Add />}
             onClick={() => { setEditTarget(null); setDialogOpen(true); }}
@@ -509,10 +597,20 @@ export default function Bookmarks() {
                 </Button>
               )}
             </Box>
-          ) : (
+          ) : viewMode === 'grid' ? (
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 2 }}>
               {bookmarks.map(b => (
                 <BookmarkCard key={b.id} bookmark={b}
+                  onEdit={(bk) => { setEditTarget(bk); setDialogOpen(true); }}
+                  onDelete={(bk) => setDeleteTarget({ type: 'bookmark', item: bk })}
+                  onCopy={handleCopy}
+                />
+              ))}
+            </Box>
+          ) : (
+            <Box sx={{ bgcolor: 'white', border: '1px solid #e5e7eb', borderRadius: 2.5, overflow: 'hidden' }}>
+              {bookmarks.map(b => (
+                <BookmarkRow key={b.id} bookmark={b}
                   onEdit={(bk) => { setEditTarget(bk); setDialogOpen(true); }}
                   onDelete={(bk) => setDeleteTarget({ type: 'bookmark', item: bk })}
                   onCopy={handleCopy}

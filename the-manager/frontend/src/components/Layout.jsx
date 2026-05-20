@@ -35,15 +35,21 @@ export default function Layout() {
   // ── Feature flags (from Setup → Features toggles) ──────────────────────
   const [jiraEnabled,      setJiraEnabled]      = useState(false);
   const [aiEnabled,        setAiEnabled]        = useState(false);
+  const [meetingNotesEnabled, setMeetingNotesEnabled] = useState(true);
 
   useEffect(() => {
-    api.get('/features')
+    const reload = () => api.get('/features')
       .then(r => {
         setJiraEnabled(!!r.data.feature_team_board);
         setAiEnabled(!!r.data.feature_ai_newsletter);
+        setMeetingNotesEnabled(r.data.feature_meeting_notes !== false);
       })
       .catch(() => {});
-  }, [location.pathname]); // re-fetch on every navigation so toggles take effect immediately
+
+    reload();
+    window.addEventListener('features-changed', reload);
+    return () => window.removeEventListener('features-changed', reload);
+  }, [location.pathname]);
 
   // Persist collapsed state across sessions
   const [collapsed, setCollapsed] = useState(() => {
@@ -62,23 +68,59 @@ export default function Layout() {
 
   const handleLogout = () => { dispatch(logout()); navigate('/login'); };
 
-  const menuItems = [
-    { text: 'Dashboard',     icon: <DashboardIcon fontSize="small" />,  path: '/' },
-    { text: 'Initiatives',   icon: <ListIcon fontSize="small" />,        path: '/initiatives' },
-    { text: 'Mind Map',      icon: <AccountTree fontSize="small" />,     path: '/mindmap' },
-    { text: 'Tasks',         icon: <TasksIcon fontSize="small" />,       path: '/tasks' },
-    { text: 'Bookmarks',     icon: <BookmarkIcon fontSize="small" />,    path: '/bookmarks' },
+  const coreItems = [
+    { text: 'Dashboard',   icon: <DashboardIcon fontSize="small" />, path: '/' },
+    { text: 'Initiatives', icon: <ListIcon fontSize="small" />,       path: '/initiatives' },
+    { text: 'Mind Map',    icon: <AccountTree fontSize="small" />,    path: '/mindmap' },
+    { text: 'Tasks',       icon: <TasksIcon fontSize="small" />,      path: '/tasks' },
+    { text: 'Bookmarks',   icon: <BookmarkIcon fontSize="small" />,   path: '/bookmarks' },
+    { text: 'Notes',       icon: <NoteAlt fontSize="small" />,        path: '/notes' },
+  ];
 
-    { text: 'Notes',         icon: <NoteAlt fontSize="small" />,         path: '/notes' },
-    { text: 'Meeting Notes', icon: <EventNote fontSize="small" />,       path: '/meeting-notes' },
-    ...(aiEnabled   ? [{ text: 'AI Newsletter', icon: <FeedOutlined fontSize="small" />, path: '/ai-newsletter' }] : []),
-    ...(jiraEnabled ? [{ text: 'Team Board',    icon: <Groups fontSize="small" />,        path: '/team-board'    }] : []),
-    { text: 'Users',         icon: <PeopleIcon fontSize="small" />,      path: '/users' },
-    { text: 'Setup',         icon: <SettingsIcon fontSize="small" />,    path: '/setup' },
-    { text: 'Help',          icon: <HelpOutline fontSize="small" />,     path: '/help' },
+  const featureItems = [
+    ...(meetingNotesEnabled ? [{ text: 'Meeting Notes', icon: <EventNote fontSize="small" />,   path: '/meeting-notes' }] : []),
+    ...(aiEnabled           ? [{ text: 'AI Newsletter', icon: <FeedOutlined fontSize="small" />, path: '/ai-newsletter' }] : []),
+    ...(jiraEnabled         ? [{ text: 'Team Board',    icon: <Groups fontSize="small" />,        path: '/team-board'    }] : []),
+  ];
+
+  const systemItems = [
+    { text: 'Users', icon: <PeopleIcon fontSize="small" />,  path: '/users' },
+    { text: 'Setup', icon: <SettingsIcon fontSize="small" />, path: '/setup' },
+    { text: 'Help',  icon: <HelpOutline fontSize="small" />,  path: '/help' },
   ];
 
   const initials = user?.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
+
+  const NavItem = ({ item }) => {
+    const active = location.pathname === item.path;
+    const btn = (
+      <ListItemButton
+        onClick={() => { navigate(item.path); setMobileOpen(false); }}
+        sx={{
+          borderRadius: 2, mx: 1, width: 'auto', mb: 0.25, py: 1,
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          bgcolor: active ? SIDEBAR_ACTIVE : 'transparent',
+          color: active ? SIDEBAR_ACTIVE_TEXT : SIDEBAR_TEXT,
+          '&:hover': { bgcolor: active ? SIDEBAR_ACTIVE : SIDEBAR_HOVER, color: '#ffffff' },
+          '& .MuiListItemIcon-root': { color: active ? SIDEBAR_ACTIVE_TEXT : SIDEBAR_TEXT },
+          '&:hover .MuiListItemIcon-root': { color: '#ffffff' },
+        }}
+      >
+        <ListItemIcon sx={{ minWidth: collapsed ? 0 : 34 }}>{item.icon}</ListItemIcon>
+        {!collapsed && (
+          <ListItemText
+            primary={item.text}
+            primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: active ? 600 : 400 }}
+          />
+        )}
+      </ListItemButton>
+    );
+    return (
+      <ListItem disablePadding>
+        {collapsed ? <Tooltip title={item.text} placement="right" arrow>{btn}</Tooltip> : btn}
+      </ListItem>
+    );
+  };
 
   const drawerContent = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: SIDEBAR_BG, overflow: 'hidden' }}>
@@ -107,46 +149,37 @@ export default function Layout() {
       <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)', mx: collapsed ? 1 : 2 }} />
 
       {/* Nav items */}
-      <List sx={{ flex: 1, pt: 1.5, px: 0 }}>
-        {menuItems.map((item) => {
-          const active = location.pathname === item.path;
-          const btn = (
-            <ListItemButton
-              onClick={() => { navigate(item.path); setMobileOpen(false); }}
-              sx={{
-                borderRadius: 2,
-                mx: 1,
-                width: 'auto',
-                mb: 0.25,
-                py: 1,
-                justifyContent: collapsed ? 'center' : 'flex-start',
-                bgcolor: active ? SIDEBAR_ACTIVE : 'transparent',
-                color: active ? SIDEBAR_ACTIVE_TEXT : SIDEBAR_TEXT,
-                '&:hover': { bgcolor: active ? SIDEBAR_ACTIVE : SIDEBAR_HOVER, color: '#ffffff' },
-                '& .MuiListItemIcon-root': { color: active ? SIDEBAR_ACTIVE_TEXT : SIDEBAR_TEXT },
-                '&:hover .MuiListItemIcon-root': { color: '#ffffff' },
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: collapsed ? 0 : 34 }}>{item.icon}</ListItemIcon>
-              {!collapsed && (
-                <ListItemText
-                  primary={item.text}
-                  primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: active ? 600 : 400 }}
-                />
-              )}
-            </ListItemButton>
-          );
+      <List sx={{ flex: 1, pt: 1.5, px: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+        {/* Core items */}
+        {coreItems.map((item) => <NavItem key={item.text} item={item} />)}
 
-          return (
-            <ListItem key={item.text} disablePadding>
-              {collapsed ? (
-                <Tooltip title={item.text} placement="right" arrow>
-                  {btn}
-                </Tooltip>
-              ) : btn}
-            </ListItem>
-          );
-        })}
+        {/* Features section — only if at least one is enabled */}
+        {featureItems.length > 0 && (
+          <>
+            {collapsed ? (
+              <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)', mx: 1, my: 1 }} />
+            ) : (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, mt: 1.5, mb: 0.5 }}>
+                <Divider sx={{ flex: 1, borderColor: 'rgba(255,255,255,0.12)' }} />
+                <Typography sx={{ fontSize: '0.62rem', fontWeight: 700, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                  Features
+                </Typography>
+                <Divider sx={{ flex: 1, borderColor: 'rgba(255,255,255,0.12)' }} />
+              </Box>
+            )}
+            {featureItems.map((item) => <NavItem key={item.text} item={item} />)}
+          </>
+        )}
+
+        {/* System items */}
+        <Box sx={{ mt: 'auto' }} />
+        {!collapsed && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, mt: 1.5, mb: 0.5 }}>
+            <Divider sx={{ flex: 1, borderColor: 'rgba(255,255,255,0.08)' }} />
+          </Box>
+        )}
+        {collapsed && <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)', mx: 1, my: 1 }} />}
+        {systemItems.map((item) => <NavItem key={item.text} item={item} />)}
       </List>
 
       <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)', mx: collapsed ? 1 : 2 }} />

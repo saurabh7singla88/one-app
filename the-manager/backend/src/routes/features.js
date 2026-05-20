@@ -9,6 +9,7 @@ router.use(authenticate);
 const FEATURES = {
   feature_team_board:    'false',
   feature_ai_newsletter: 'false',
+  feature_meeting_notes: 'true',
 };
 
 // GET /api/features — return all feature flags

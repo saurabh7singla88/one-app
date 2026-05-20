@@ -7,7 +7,7 @@ import {
 import {
   SmartToy, Visibility, VisibilityOff, CheckCircle, Save,
   Email, CheckCircleOutline, ErrorOutline, Launch, BugReport,
-  SyncAlt, CloudOff, FeedOutlined, Groups, ToggleOn,
+  SyncAlt, CloudOff, FeedOutlined, Groups, ToggleOn, EventNote,
 } from '@mui/icons-material';
 import api from '../api/axios';
 
@@ -34,7 +34,7 @@ const OLLAMA_DEFAULTS = ['llama3.1:latest', 'llama3.2:latest', 'mistral:latest',
 function FeaturesSection() {
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(null); // key being saved
-  const [flags, setFlags]       = useState({ feature_team_board: false, feature_ai_newsletter: false });
+  const [flags, setFlags]       = useState({ feature_team_board: false, feature_ai_newsletter: false, feature_meeting_notes: true });
   // Dependency config status
   const [jiraOk, setJiraOk]     = useState(null);
   const [aiOk,   setAiOk]       = useState(null);
@@ -57,6 +57,7 @@ function FeaturesSection() {
     try {
       await api.put('/features', { [key]: value });
       setFlags(f => ({ ...f, [key]: value }));
+      window.dispatchEvent(new CustomEvent('features-changed'));
     } catch { /* ignore */ }
     finally { setSaving(null); }
   };
@@ -107,6 +108,75 @@ function FeaturesSection() {
 
   return (
     <Box>
+      {/* ── Meeting Notes ── highlighted feature ──────────────────────────── */}
+      <Box
+        sx={{
+          border: '1.5px solid #e0e7ff',
+          borderRadius: 2.5,
+          overflow: 'hidden',
+          mb: 2,
+          bgcolor: flags.feature_meeting_notes ? '#fafafe' : '#fafafa',
+          transition: 'background 0.2s',
+        }}
+      >
+        {/* Toggle row */}
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, px: 2.5, pt: 2, pb: flags.feature_meeting_notes ? 1.5 : 2 }}>
+          <Box sx={{ mt: 0.25, color: flags.feature_meeting_notes ? '#6366f1' : 'text.disabled' }}><EventNote /></Box>
+          <Box sx={{ flex: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="body1" fontWeight={700}>Meeting Notes</Typography>
+              {flags.feature_meeting_notes && <Chip label="Enabled" size="small" color="primary" sx={{ height: 20, fontSize: 10 }} />}
+            </Box>
+            <Typography variant="body2" color="text.secondary" mt={0.25}>
+              Pulls emails from a Gmail label, extracts action items with AI, and links notes directly to your initiatives.
+            </Typography>
+          </Box>
+          <FormControlLabel
+            control={<Switch checked={flags.feature_meeting_notes} onChange={e => toggle('feature_meeting_notes', e.target.checked)} disabled={saving === 'feature_meeting_notes'} color="primary" />}
+            label="" sx={{ mr: 0 }}
+          />
+        </Box>
+
+        {/* Marketing callout — only when enabled */}
+        {flags.feature_meeting_notes && (
+          <Box
+            sx={{
+              mx: 2.5, mb: 2, px: 2, py: 1.5,
+              bgcolor: 'white',
+              border: '1px solid #e0e7ff',
+              borderRadius: 2,
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: 1.5,
+            }}
+          >
+            {[
+              { icon: '🔗', title: 'Link to initiatives', desc: 'Save any email as a meeting note and attach it to an initiative for full context.' },
+              { icon: '⚡', title: 'AI action items',     desc: 'Instantly extract who needs to do what from any email thread.' },
+              { icon: '📋', title: 'Concise view',        desc: 'Read long email chains as clean, scannable notes — no inbox clutter.' },
+              { icon: '📅', title: 'Browse by date',      desc: 'Filter notes by day and Gmail label to find any meeting in seconds.' },
+            ].map(({ icon, title, desc }) => (
+              <Box key={title} display="flex" gap={1} alignItems="flex-start">
+                <Box sx={{ fontSize: '1rem', lineHeight: 1, mt: 0.15, flexShrink: 0 }}>{icon}</Box>
+                <Box>
+                  <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: '#4338ca', lineHeight: 1.3 }}>{title}</Typography>
+                  <Typography sx={{ fontSize: '0.72rem', color: '#6b7280', lineHeight: 1.4, mt: 0.25 }}>{desc}</Typography>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        )}
+      </Box>
+
+      {/* ── Optional integrations divider ─────────────────────────────────── */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2, mt: 1 }}>
+        <Divider sx={{ flex: 1 }} />
+        <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+          Optional integrations
+        </Typography>
+        <Divider sx={{ flex: 1 }} />
+      </Box>
+
       <FeatureRow
         flagKey="feature_ai_newsletter"
         label="AI Newsletter"
