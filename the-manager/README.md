@@ -132,6 +132,149 @@ Available as a **desktop app** (Electron, macOS/Windows) or a **web app** (Node.
 3. Register an account on first launch
 4. Optionally configure AI, Gmail, or JIRA from **Setup** in the sidebar
 
+---
+
+## Running with Docker (Self-hosted / Cloud)
+
+The app ships as a single Docker image — one container runs both the backend API and serves the compiled frontend. No separate web server needed.
+
+### Quick start (local machine)
+
+```bash
+# 1. Pull the image (or build locally — see below)
+docker pull ghcr.io/yourusername/the-manager:latest   # replace with your registry
+
+# 2. Run with a persistent local SQLite file
+docker run -d \
+  --name one-app \
+  -p 3000:47421 \
+  -v $(pwd)/data:/data \
+  -e DATABASE_URL=file:/data/app.db \
+  -e JWT_SECRET=change-me-use-a-long-random-string \
+  -e NODE_ENV=production \
+  ghcr.io/yourusername/the-manager:latest
+```
+
+Open `http://localhost:3000`, register your account, and start.
+
+---
+
+### Environment variables
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `JWT_SECRET` | **Yes** | — | Secret used to sign session tokens. Use a long random string (`openssl rand -hex 32`). |
+| `DATABASE_URL` | One of these two | — | SQLite file path, e.g. `file:/data/app.db`. Mount a volume so data survives restarts. |
+| `TURSO_DATABASE_URL` | One of these two | — | Turso / libsql URL, e.g. `libsql://your-db.turso.io`. Takes priority over `DATABASE_URL`. |
+| `TURSO_AUTH_TOKEN` | If using Turso | — | Auth token from your Turso dashboard. |
+| `TOKEN_ENCRYPTION_KEY` | No | random on boot | 32-char hex key for encrypting stored Gmail/IMAP credentials. Set this if you want credentials to survive container restarts. Generate: `openssl rand -hex 16`. |
+| `ALLOWED_ORIGINS` | No | `http://localhost:3000` | Comma-separated list of origins allowed by CORS. Set to your public domain in production (e.g. `https://one.example.com`). |
+| `PORT` | No | `47421` | Internal port the server listens on. The Docker image always exposes `47421`; map it to any host port with `-p`. |
+| `NODE_ENV` | No | `development` | Set to `production` for production deployments. |
+
+> **Minimum required**: `JWT_SECRET` + one of `DATABASE_URL` / `TURSO_DATABASE_URL`.
+
+---
+
+### Build the image yourself
+
+```bash
+git clone https://github.com/yourusername/the-manager.git
+cd the-manager
+docker build -t the-manager:latest .
+```
+
+The Dockerfile is a two-stage build: Vite compiles the frontend in stage 1, Express serves both the API and static files in stage 2. No separate frontend container or reverse proxy required.
+
+---
+
+### docker-compose (recommended for self-hosting)
+
+Create a `.env` file alongside `docker-compose.yml`:
+
+```env
+JWT_SECRET=replace-with-output-of-openssl-rand-hex-32
+TOKEN_ENCRYPTION_KEY=replace-with-output-of-openssl-rand-hex-16
+
+# Option A — Turso (managed cloud SQLite, survives container restarts automatically)
+TURSO_DATABASE_URL=libsql://your-db.turso.io
+TURSO_AUTH_TOKEN=your-turso-auth-token
+
+# Option B — local SQLite (use the volume below)
+# DATABASE_URL=file:/data/app.db
+
+# Set to your public domain in production
+ALLOWED_ORIGINS=http://localhost:3000
+```
+
+Then run:
+
+```bash
+docker compose up -d        # start
+docker compose down         # stop
+docker compose logs -f app  # tail logs
+```
+
+The included `docker-compose.yml` already maps port `3000 → 47421` and passes all variables from `.env` into the container.
+
+For local SQLite, add a volume mount to `docker-compose.yml`:
+
+```yaml
+volumes:
+  - ./data:/data
+```
+
+---
+
+### Deploying to cloud platforms
+
+The image runs on any platform that accepts a Docker container. All configuration is via environment variables — no code changes needed.
+
+| Platform | Steps |
+|---|---|
+| **Railway** | Connect repo → set env vars in dashboard → deploy. Railway auto-detects the `Dockerfile`. |
+| **Render** | New Web Service → Docker → set env vars → deploy. Add a Disk at `/data` if using local SQLite. |
+| **Fly.io** | `fly launch` (detects Dockerfile) → `fly secrets set JWT_SECRET=... TURSO_DATABASE_URL=...` → `fly deploy`. |
+| **DigitalOcean App Platform** | New App → Dockerfile → set env vars → deploy. Use a persistent volume for SQLite or Turso for zero-config persistence. |
+| **AWS ECS / GCP Cloud Run / Azure Container Apps** | Push image to ECR/GCR/ACR → create service → set env vars → expose port `47421`. |
+| **Any VPS (nginx + Docker)** | Run the container, then proxy `nginx → localhost:3000`. |
+
+**Recommendation for simplest persistence**: use [Turso](https://turso.tech) (free tier: 500 MB, no volume needed). Set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` and the container is fully stateless — you can restart, scale, or redeploy without losing data.
+
+---
+
+### Nginx reverse proxy (optional, VPS)
+
+If you want HTTPS or a custom domain in front of the container:
+
+```nginx
+server {
+    listen 80;
+    server_name one.example.com;
+
+    location / {
+        proxy_pass         http://localhost:3000;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Add `ALLOWED_ORIGINS=https://one.example.com` to your env and use Certbot for TLS.
+
+---
+
+### After first deploy
+
+1. Open the app URL in your browser
+2. **Register** — the first registered user becomes the admin
+3. Go to **Setup** to configure AI providers, Gmail, or JIRA/Confluence (all optional)
+4. Create a canvas and start tracking
+
+---
+
 ## Configuration
 
 All integrations are configured from the **Setup** page in the app sidebar — no `.env` editing required for the desktop app.

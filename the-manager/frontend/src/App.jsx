@@ -11,6 +11,7 @@ import Users from './pages/Users';
 
 import Notes from './pages/Notes';
 import MeetingNotes from './pages/MeetingNotes';
+import Bookmarks from './pages/Bookmarks';
 import AINewsletter from './pages/AINewsletter';
 import TeamBoard from './pages/TeamBoard';
 import Setup from './pages/Setup';
@@ -31,6 +32,7 @@ function App() {
         <Route path="/initiatives/:id" element={<InitiativeDetail />} />
         <Route path="/mindmap" element={<MindMap />} />
         <Route path="/tasks" element={<Tasks />} />
+        <Route path="/bookmarks" element={<Bookmarks />} />
 
         <Route path="/notes" element={<Notes />} />
         <Route path="/meeting-notes" element={<MeetingNotes />} />

@@ -9,6 +9,7 @@ import {
   AccountTree, CheckBox as TasksIcon, People as PeopleIcon,
   NoteAlt, EventNote, FeedOutlined, Groups,
   Settings as SettingsIcon, ChevronLeft, ChevronRight, HelpOutline,
+  Bookmark as BookmarkIcon,
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -66,6 +67,7 @@ export default function Layout() {
     { text: 'Initiatives',   icon: <ListIcon fontSize="small" />,        path: '/initiatives' },
     { text: 'Mind Map',      icon: <AccountTree fontSize="small" />,     path: '/mindmap' },
     { text: 'Tasks',         icon: <TasksIcon fontSize="small" />,       path: '/tasks' },
+    { text: 'Bookmarks',     icon: <BookmarkIcon fontSize="small" />,    path: '/bookmarks' },
 
     { text: 'Notes',         icon: <NoteAlt fontSize="small" />,         path: '/notes' },
     { text: 'Meeting Notes', icon: <EventNote fontSize="small" />,       path: '/meeting-notes' },

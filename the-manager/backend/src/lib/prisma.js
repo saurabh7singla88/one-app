@@ -84,6 +84,9 @@ export const prisma = base.$extends({
       nodes: { needs: { nodes: true }, compute: b => parse(b.nodes, []) },
       edges: { needs: { edges: true }, compute: b => parse(b.edges, []) },
     },
+    bookmark: {
+      tags: { needs: { tags: true }, compute: b => parse(b.tags, []) },
+    },
   },
 
   // ── Write side: stringify JS value to TEXT before storing ─────────────────
@@ -160,6 +163,16 @@ export const prisma = base.$extends({
         if (args.create?.edges !== undefined) args.create.edges = stringify(args.create.edges ?? []);
         if (args.update?.nodes !== undefined) args.update.nodes = stringify(args.update.nodes);
         if (args.update?.edges !== undefined) args.update.edges = stringify(args.update.edges);
+        return query(args);
+      },
+    },
+    bookmark: {
+      async create({ args, query }) {
+        if (args.data.tags !== undefined) args.data.tags = stringify(args.data.tags ?? []);
+        return query(args);
+      },
+      async update({ args, query }) {
+        if (args.data.tags !== undefined) args.data.tags = stringify(args.data.tags);
         return query(args);
       },
     },

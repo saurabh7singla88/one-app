@@ -17,6 +17,7 @@ import jiraRoutes from './routes/jira.js';
 import integrationsRoutes from './routes/integrations.js';
 import syncRoutes from './routes/sync.js';
 import featuresRoutes from './routes/features.js';
+import bookmarksRoutes from './routes/bookmarks.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { prisma } from './lib/prisma.js';
 
@@ -55,6 +56,7 @@ app.use('/api/jira', jiraRoutes);
 app.use('/api/integrations', integrationsRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/features', featuresRoutes);
+app.use('/api/bookmarks', bookmarksRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -140,7 +142,17 @@ export async function runMigrations(migrationsDir) {
         .map(s => s.replace(/--[^\n]*/g, '').trim())
         .filter(s => s.length > 0);
       for (const stmt of statements) {
-        await prisma.$executeRawUnsafe(stmt);
+        try {
+          await prisma.$executeRawUnsafe(stmt);
+        } catch (stmtErr) {
+          const msg = stmtErr.message || '';
+          // Treat "already exists" / "duplicate column" as idempotent — migration was already applied
+          if (/already exists|duplicate column/i.test(msg)) {
+            log(`SKIP (already applied): ${folder} — ${msg.split('\n')[0]}`);
+          } else {
+            throw stmtErr;
+          }
+        }
       }
       await prisma.$executeRawUnsafe(
         `INSERT INTO "_prisma_migrations" (id, checksum, finished_at, migration_name, applied_steps_count)
@@ -158,5 +170,11 @@ export async function runMigrations(migrationsDir) {
 
 // Auto-start when run directly (not imported by Electron)
 if (process.env.ELECTRON !== 'true') {
-  startServer();
+  const migrationsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../prisma/migrations');
+  runMigrations(migrationsDir)
+    .then(() => startServer())
+    .catch(err => {
+      console.error('Migration failed:', err.message);
+      process.exit(1);
+    });
 }
