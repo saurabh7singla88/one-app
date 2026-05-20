@@ -38,7 +38,7 @@ import {
   Menu as MuiMenu,
   MenuItem as MuiMenuItem,
 } from '@mui/material';
-import { Add, List as ListIcon, Refresh, Label, PersonAdd, Download, SelectAll, CropFree, AutoFixHigh, Fullscreen, FullscreenExit, ChevronLeft, ChevronRight } from '@mui/icons-material';
+import { Add, List as ListIcon, Refresh, Label, PersonAdd, Download, SelectAll, CropFree, AutoFixHigh, Fullscreen, FullscreenExit, ChevronLeft, ChevronRight, FormatListBulleted, Search as SearchIcon } from '@mui/icons-material';
 import api from '../api/axios';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -167,9 +167,11 @@ function MindMapInner() {
   const [tagInput, setTagInput] = useState('');
   const [users, setUsers] = useState([]);
   const [selectedRootId, setSelectedRootId] = useState(null);
-  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
+  const [leftPanelOpen, setLeftPanelOpen] = useState(false);
+  const [panelSearch, setPanelSearch] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
+
   const splitPanelRef = useRef(null);
 
   const toggleFullscreen = useCallback(() => {
@@ -432,20 +434,104 @@ function MindMapInner() {
     [displayItems]
   );
 
+  const filteredRootInitiatives = useMemo(() => {
+    if (!panelSearch.trim()) return rootInitiatives;
+    const q = panelSearch.toLowerCase();
+    return rootInitiatives.filter(i => i.title.toLowerCase().includes(q));
+  }, [rootInitiatives, panelSearch]);
+
+  // Spawn a draft node directly on the canvas — Lucidchart-style inline editing.
+  // isSibling=true: parentId=parent of source node, sourceNodeId=source node (position ref).
+  // isSibling=false: parentId=source node, draft placed below it.
+  const spawnDraftNode = useCallback((parentId, priority, sourceNodeId = null, isSibling = false) => {
+    const currentNodes = getNodes();
+    // Only one draft at a time
+    if (currentNodes.some(n => n.id.startsWith('draft-'))) return;
+
+    let pos;
+    if (isSibling && sourceNodeId) {
+      const src = currentNodes.find(n => n.id === sourceNodeId);
+      pos = src
+        ? { x: src.position.x + NODE_WIDTH + H_GAP, y: src.position.y }
+        : { x: 0, y: 0 };
+    } else {
+      const parentNode = currentNodes.find(n => n.id === parentId);
+      if (!parentNode) return;
+      const children = currentNodes.filter(n => n.data?.initiative?.parentId === parentId);
+      const rightmost = children.reduce((r, n) => (!r || n.position.x > r.position.x) ? n : r, null);
+      pos = {
+        x: rightmost ? rightmost.position.x + NODE_WIDTH + H_GAP : parentNode.position.x,
+        y: parentNode.position.y + NODE_HEIGHT + V_GAP,
+      };
+    }
+
+    const draftId = `draft-${Date.now()}`;
+
+    const onConfirm = async (title) => {
+      setNodes(nds => nds.filter(n => n.id !== draftId));
+      setEdges(eds => eds.filter(e => e.id !== `e-${draftId}`));
+      await dispatch(createInitiative({
+        title,
+        type: parentId ? 'TASK' : 'INITIATIVE',
+        status: 'OPEN',
+        priority: priority || 'MEDIUM',
+        parentId: parentId || null,
+        ...(activeCanvasId ? { canvasId: activeCanvasId } : {}),
+      }));
+      dispatch(fetchAllInitiatives({ canvasId: activeCanvasId }));
+    };
+
+    const onCancel = () => {
+      setNodes(nds => nds.filter(n => n.id !== draftId));
+      setEdges(eds => eds.filter(e => e.id !== `e-${draftId}`));
+    };
+
+    setNodes(nds => [...nds, {
+      id: draftId, type: 'initiative', position: pos,
+      data: { isDraft: true, priority, onConfirm, onCancel },
+    }]);
+
+    if (parentId) {
+      setEdges(eds => [...eds, {
+        id: `e-${draftId}`,
+        source: parentId, target: draftId,
+        type: 'smoothstep',
+        style: { stroke: '#a5b4fc', strokeWidth: 1.5, strokeDasharray: '6,4' },
+      }]);
+    }
+  }, [getNodes, setNodes, setEdges, dispatch, activeCanvasId]);
+
+  // Keyboard shortcuts on selected node: Tab=add child, Enter=add sibling
+  const onKeyDown = useCallback((e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    const sel = getNodes().find(n => n.selected && !n.id.startsWith('draft-'));
+    if (!sel) return;
+    const init = sel.data?.initiative;
+    if (!init) return;
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      spawnDraftNode(init.id, init.priority, null, false);
+    } else if (e.key === 'Enter' && init.parentId) {
+      e.preventDefault();
+      spawnDraftNode(init.parentId, init.priority, sel.id, true);
+    }
+  }, [getNodes, spawnDraftNode]);
+
   // Reset selection when canvas switches
   useEffect(() => { setSelectedRootId(null); }, [activeCanvasId]);
 
-  // Items actually rendered in the mind map (full set, or just selected root + descendants)
+  // Always show exactly one tree: the selected root, or auto-pick the first root
   const selectedDisplayItems = useMemo(() => {
-    if (!selectedRootId) return displayItems;
-    const included = new Set([selectedRootId]);
-    const queue = [selectedRootId];
+    const effectiveRootId = selectedRootId ?? rootInitiatives[0]?.id;
+    if (!effectiveRootId) return [];
+    const included = new Set([effectiveRootId]);
+    const queue = [effectiveRootId];
     while (queue.length) {
       const cur = queue.shift();
       (childrenOf[cur] || []).forEach(cid => { included.add(cid); queue.push(cid); });
     }
     return displayItems.filter(i => included.has(i.id));
-  }, [selectedRootId, displayItems, childrenOf]);
+  }, [selectedRootId, rootInitiatives, displayItems, childrenOf]);
 
   const autoArrange = useCallback(() => {
     if (!selectedDisplayItems.length) return;
@@ -537,11 +623,13 @@ function MindMapInner() {
       setDetailsOpen(true);
     };
 
-    const handleAddChild = (parentId, parentPriority) => {
-      setCreateParentId(parentId);
-      setFormData({ title: '', description: '', type: 'TASK', status: 'OPEN', priority: parentPriority || 'MEDIUM', tags: [], assigneeIds: [] });
-      setTagInput('');
-      setCreateDialogOpen(true);
+    // Node-level add child/sibling → spawn draft node inline on canvas
+    const handleAddChild = (nodeId, priority) => {
+      spawnDraftNode(nodeId, priority, null, false);
+    };
+
+    const handleAddSibling = (parentId, sourceNodeId, priority) => {
+      spawnDraftNode(parentId, priority, sourceNodeId, true);
     };
 
     const rfNodes = selectedDisplayItems
@@ -576,7 +664,8 @@ function MindMapInner() {
             isCollapsed: !!collapsed[initiative.id],
             onToggleCollapse: handleToggleCollapse,
             onOpenDetails: handleOpenDetails,
-            onAddChild: handleAddChild
+            onAddChild: handleAddChild,
+            onAddSibling: handleAddSibling,
           }
         };
       });
@@ -648,279 +737,285 @@ function MindMapInner() {
     <Box sx={{ height: 'calc(100vh - 90px)', display: 'flex', flexDirection: 'column' }}>
       <CanvasSelector screen="mindmap" />
 
-      {/* ── SPLIT PANEL CONTAINER ────────────────────────────────────────── */}
-      <Box ref={splitPanelRef} sx={{ flex: 1, display: 'flex', flexDirection: 'row', overflow: 'hidden', border: '1px solid #e2e8f0', borderRadius: isFullscreen ? 0 : 3, bgcolor: 'background.paper', ...(isFullscreen ? { height: '100vh', width: '100vw' } : {}) }}>
+      {/* ── FULL-WIDTH CANVAS ────────────────────────────────────────────── */}
+      <Box
+        ref={splitPanelRef}
+        sx={{ flex: 1, position: 'relative', overflow: 'hidden', borderRadius: isFullscreen ? 0 : 3, ...(isFullscreen ? { height: '100vh', width: '100vw' } : {}) }}
+      >
+        {/* Canvas fills entire container */}
+        <Box sx={{ position: 'absolute', inset: 0 }} onKeyDown={onKeyDown} tabIndex={-1}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            nodeTypes={NODE_TYPES}
+            onNodeDragStop={onNodeDragStop}
+            onNodeDoubleClick={onNodeDoubleClick}
+            onSelectionChange={({ nodes: sel }) => setSelectedNodeIds((sel || []).map(n => n.id))}
+            selectionOnDrag
+            panOnDrag={[1, 2]}
+            multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
+            selectionKeyCode={null}
+            onMoveEnd={onMoveEnd}
+            minZoom={0.08}
+            maxZoom={2}
+            defaultEdgeOptions={{ type: 'smoothstep' }}
+            style={{ background: '#f5f6fa' }}
+          >
+            <Background variant="dots" color="#c7d2fe" gap={28} size={1.5} />
+            <Controls
+              style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.1)', borderRadius: 10, border: '1px solid #e2e8f0', overflow: 'hidden' }}
+            />
+            <MiniMap
+              nodeColor={(node) => STATUS_CONFIG[node.data?.initiative?.status]?.dot || '#94a3b8'}
+              maskColor="rgba(99,102,241,0.06)"
+              style={{ borderRadius: 10, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+            />
 
-        {/* ── LEFT PANEL ─────────────────────────────────────────────────── */}
-        <Box sx={{ width: leftPanelCollapsed ? 40 : 280, flexShrink: 0, borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', overflow: 'hidden', transition: 'width 0.2s ease' }}>
-          {leftPanelCollapsed ? (
-            // Collapsed: thin strip with expand button
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pt: 1.5 }}>
-              <Tooltip title="Expand panel" placement="right" arrow>
-                <IconButton size="small" onClick={() => setLeftPanelCollapsed(false)} sx={{ color: 'text.secondary' }}>
-                  <ChevronRight fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          ) : (
-            <>
-          {/* Header */}
-          <Box sx={{ px: 2, pt: 2, pb: 1.5 }}>
-            <Box display="flex" justifyContent="space-between" alignItems="center">
-              <Typography variant="subtitle1" fontWeight={700}>Mind Map</Typography>
-              <Box display="flex" gap={0.5} alignItems="center">
-                <Button
+            {/* Top-left: panel toggle + new initiative */}
+            <Panel position="top-left">
+              <Box display="flex" gap={0.75} alignItems="center">
+                <Tooltip title={leftPanelOpen ? 'Close panel' : 'Open initiatives panel'} placement="right">
+                  <IconButton
+                    onClick={() => setLeftPanelOpen(v => !v)}
+                    size="small"
+                    sx={{
+                      bgcolor: leftPanelOpen ? '#6366f1' : 'white',
+                      color: leftPanelOpen ? 'white' : 'text.secondary',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                      border: '1px solid #e2e8f0',
+                      '&:hover': { bgcolor: leftPanelOpen ? '#4f46e5' : '#f5f5f5' },
+                    }}
+                  >
+                    <FormatListBulleted fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="New initiative" placement="right">
+                  <IconButton
+                    onClick={() => {
+                      setCreateParentId(null);
+                      setFormData({ title: '', description: '', type: 'INITIATIVE', status: 'OPEN', priority: 'MEDIUM', tags: [], assigneeIds: [] });
+                      setTagInput('');
+                      setCreateDialogOpen(true);
+                    }}
+                    size="small"
+                    sx={{ bgcolor: 'white', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', border: '1px solid #e2e8f0', '&:hover': { bgcolor: '#f5f5f5' } }}
+                  >
+                    <Add fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            </Panel>
+
+            {/* Top-right: action toolbar */}
+            <Panel position="top-right">
+              <Box
+                display="flex" gap={0.75} alignItems="center"
+                sx={{ bgcolor: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)', border: '1px solid #e2e8f0', borderRadius: 2.5, px: 1, py: 0.75, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}
+              >
+                <Chip
+                  label={showCompleted ? 'Showing all' : 'Active only'}
                   size="small"
-                  variant="contained"
-                  startIcon={<Add />}
-                  onClick={() => {
-                    setCreateParentId(null);
-                    setFormData({ title: '', description: '', type: 'INITIATIVE', status: 'OPEN', priority: 'MEDIUM', tags: [], assigneeIds: [] });
-                    setTagInput('');
-                    setCreateDialogOpen(true);
-                  }}
+                  onClick={() => setShowCompleted(v => !v)}
+                  color={showCompleted ? 'primary' : 'default'}
+                  variant={showCompleted ? 'filled' : 'outlined'}
+                  sx={{ cursor: 'pointer', fontWeight: 500, height: 26 }}
+                />
+                <Tooltip title="Export as image">
+                  <span>
+                    <IconButton
+                      onClick={e => setExportMenuAnchor(e.currentTarget)}
+                      disabled={exporting}
+                      size="small"
+                      sx={{ border: '1px solid #e2e8f0', borderRadius: 1.5, color: 'text.secondary' }}
+                    >
+                      {exporting ? <CircularProgress size={16} /> : <Download fontSize="small" />}
+                    </IconButton>
+                  </span>
+                </Tooltip>
+                <MuiMenu
+                  anchorEl={exportMenuAnchor}
+                  open={Boolean(exportMenuAnchor)}
+                  onClose={() => setExportMenuAnchor(null)}
+                  PaperProps={{ sx: { borderRadius: 2, minWidth: 200, boxShadow: '0 4px 20px rgba(0,0,0,0.12)' } }}
                 >
-                  New
+                  <MuiMenuItem dense onClick={handleExportImage} sx={{ gap: 1.5 }}>
+                    <SelectAll sx={{ fontSize: 18, color: 'text.secondary' }} />
+                    <Box>
+                      <Typography variant="body2" fontWeight={500}>Export all</Typography>
+                      <Typography variant="caption" color="text.secondary">Save entire mind map</Typography>
+                    </Box>
+                  </MuiMenuItem>
+                  <MuiMenuItem dense onClick={handleExportSelected} disabled={selectedNodeIds.length === 0} sx={{ gap: 1.5 }}>
+                    <CropFree sx={{ fontSize: 18, color: 'text.secondary' }} />
+                    <Box>
+                      <Typography variant="body2" fontWeight={500}>
+                        Export selected{selectedNodeIds.length > 0 ? ` (${selectedNodeIds.length})` : ''}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {selectedNodeIds.length === 0 ? 'Select nodes first' : 'Save selected nodes only'}
+                      </Typography>
+                    </Box>
+                  </MuiMenuItem>
+                </MuiMenu>
+                <Tooltip title="Auto-arrange">
+                  <IconButton onClick={autoArrange} size="small" sx={{ border: '1px solid #e2e8f0', borderRadius: 1.5, color: 'text.secondary' }}>
+                    <AutoFixHigh fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Refresh">
+                  <IconButton onClick={() => dispatch(fetchAllInitiatives({ canvasId: activeCanvasId }))} size="small" sx={{ border: '1px solid #e2e8f0', borderRadius: 1.5, color: 'text.secondary' }}>
+                    <Refresh fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+                  <IconButton onClick={toggleFullscreen} size="small" sx={{ border: '1px solid #e2e8f0', borderRadius: 1.5, color: isFullscreen ? '#6366f1' : 'text.secondary' }}>
+                    {isFullscreen ? <FullscreenExit fontSize="small" /> : <Fullscreen fontSize="small" />}
+                  </IconButton>
+                </Tooltip>
+                <Button variant="outlined" size="small" startIcon={<ListIcon />} onClick={() => navigate('/initiatives')}>
+                  List
                 </Button>
-                <Tooltip title="Collapse panel">
-                  <IconButton size="small" onClick={() => setLeftPanelCollapsed(true)} sx={{ color: 'text.secondary' }}>
+              </Box>
+            </Panel>
+
+            {/* Bottom hint */}
+            <Panel position="bottom-center">
+              <Box sx={{ bgcolor: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(6px)', border: '1px solid #e2e8f0', borderRadius: 6, px: 1.75, py: 0.5 }}>
+                <Typography variant="caption" color="text.disabled">Drag to pan · scroll to zoom · double-click to open</Typography>
+              </Box>
+            </Panel>
+
+            {/* Status + priority legend */}
+            <Panel position="bottom-left">
+              <Box
+                display="flex" gap={1} flexWrap="wrap" alignItems="center"
+                sx={{ bgcolor: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(6px)', border: '1px solid #e2e8f0', borderRadius: 2, px: 1.5, py: 0.75, maxWidth: 420 }}
+              >
+                {Object.entries(STATUS_CONFIG).map(([status, cfg]) => (
+                  <Box key={status} display="flex" alignItems="center" gap={0.5}>
+                    <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: cfg.dot }} />
+                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>{cfg.label}</Typography>
+                  </Box>
+                ))}
+                <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                {Object.entries(PRIORITY_COLORS).map(([p, color]) => (
+                  <Box key={p} display="flex" alignItems="center" gap={0.4}>
+                    <Box sx={{ width: 3, height: 12, bgcolor: color, borderRadius: 1 }} />
+                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>{p.charAt(0) + p.slice(1).toLowerCase()}</Typography>
+                  </Box>
+                ))}
+              </Box>
+            </Panel>
+
+            {allItems.length === 0 && (
+              <Panel position="top-center">
+                <Box sx={{ bgcolor: 'white', p: 3, borderRadius: 3, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', textAlign: 'center', border: '1px solid #e2e8f0' }}>
+                  <Typography variant="body2" color="text.secondary" mb={1.5}>No initiatives yet.</Typography>
+                  <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setCreateDialogOpen(true)}>
+                    Create First Initiative
+                  </Button>
+                </Box>
+              </Panel>
+            )}
+          </ReactFlow>
+        </Box>
+
+        {/* ── FLOATING INITIATIVES PANEL ───────────────────────────────────── */}
+        {leftPanelOpen && (
+          <Box
+            sx={{
+              position: 'absolute', top: 0, left: 0, bottom: 0, width: 290, zIndex: 20,
+              bgcolor: 'background.paper', boxShadow: '4px 0 24px rgba(0,0,0,0.15)',
+              display: 'flex', flexDirection: 'column', overflow: 'hidden',
+              borderRight: '1px solid #e2e8f0',
+            }}
+          >
+            {/* Panel header */}
+            <Box sx={{ px: 2, pt: 2, pb: 1.5 }}>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                <Typography variant="subtitle1" fontWeight={700}>Initiatives</Typography>
+                <Tooltip title="Close panel">
+                  <IconButton size="small" onClick={() => setLeftPanelOpen(false)} sx={{ color: 'text.secondary' }}>
                     <ChevronLeft fontSize="small" />
                   </IconButton>
                 </Tooltip>
               </Box>
+              <TextField
+                size="small"
+                fullWidth
+                placeholder="Search…"
+                value={panelSearch}
+                onChange={e => setPanelSearch(e.target.value)}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16, color: 'text.disabled' }} /></InputAdornment>,
+                }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+              />
             </Box>
-          </Box>
-          <Divider />
+            <Divider />
 
-          {/* "All" row */}
-          <Box
-            onClick={() => setSelectedRootId(null)}
-            sx={{
-              px: 2, py: 1.5, cursor: 'pointer',
-              borderLeft: selectedRootId === null ? '3px solid #6366f1' : '3px solid transparent',
-              bgcolor: selectedRootId === null ? '#f5f3ff' : 'transparent',
-              '&:hover': { bgcolor: selectedRootId === null ? '#f5f3ff' : '#f8fafc' },
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            }}
-          >
-            <Typography variant="body2" fontWeight={600} color={selectedRootId === null ? '#4f46e5' : 'text.primary'}>
-              All initiatives
-            </Typography>
-            <Typography variant="caption" color="text.disabled">{displayItems.length}</Typography>
-          </Box>
-          <Divider />
+            {/* "All" row */}
+            <Box
+              onClick={() => setSelectedRootId(null)}
+              sx={{
+                px: 2, py: 1.5, cursor: 'pointer',
+                borderLeft: selectedRootId === null ? '3px solid #6366f1' : '3px solid transparent',
+                bgcolor: selectedRootId === null ? '#f5f3ff' : 'transparent',
+                '&:hover': { bgcolor: selectedRootId === null ? '#f5f3ff' : '#f8fafc' },
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}
+            >
+              <Typography variant="body2" fontWeight={600} color={selectedRootId === null ? '#4f46e5' : 'text.primary'}>
+                All initiatives
+              </Typography>
+              <Typography variant="caption" color="text.disabled">{displayItems.length}</Typography>
+            </Box>
+            <Divider />
 
-          {/* Root initiatives list */}
-          <Box sx={{ flex: 1, overflowY: 'auto' }}>
-            {rootInitiatives.map(init => {
-              const isActive = selectedRootId === init.id;
-              const childCount = (childrenOf[init.id] || []).length;
-              return (
-                <Box
-                  key={init.id}
-                  onClick={() => setSelectedRootId(init.id)}
-                  sx={{
-                    px: 2, py: 1.25, cursor: 'pointer',
-                    borderLeft: isActive ? '3px solid #6366f1' : '3px solid transparent',
-                    bgcolor: isActive ? '#f5f3ff' : 'transparent',
-                    borderBottom: '1px solid #f1f5f9',
-                    '&:hover': { bgcolor: isActive ? '#f5f3ff' : '#f8fafc' },
-                    display: 'flex', alignItems: 'flex-start', gap: 1,
-                  }}
-                >
-                  <Box sx={{ mt: 0.6, width: 7, height: 7, borderRadius: '50%', bgcolor: STATUS_CONFIG[init.status]?.dot || '#94a3b8', flexShrink: 0 }} />
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" fontWeight={isActive ? 600 : 500} color={isActive ? '#4f46e5' : 'text.primary'} noWrap>
-                      {init.title}
-                    </Typography>
-                    <Box display="flex" alignItems="center" gap={0.75} mt={0.25}>
-                      <Box sx={{ width: 3, height: 10, bgcolor: PRIORITY_COLORS[init.priority] || '#94a3b8', borderRadius: 1 }} />
-                      <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.68rem' }}>
-                        {init.priority?.charAt(0) + init.priority?.slice(1).toLowerCase()}
-                        {childCount > 0 && ` · ${childCount} child${childCount !== 1 ? 'ren' : ''}`}
+            {/* Root initiatives list */}
+            <Box sx={{ flex: 1, overflowY: 'auto' }}>
+              {filteredRootInitiatives.length === 0 && panelSearch && (
+                <Typography variant="caption" color="text.disabled" sx={{ display: 'block', p: 2 }}>
+                  No results for "{panelSearch}"
+                </Typography>
+              )}
+              {filteredRootInitiatives.map(init => {
+                const isActive = selectedRootId === init.id;
+                const childCount = (childrenOf[init.id] || []).length;
+                return (
+                  <Box
+                    key={init.id}
+                    onClick={() => setSelectedRootId(init.id)}
+                    sx={{
+                      px: 2, py: 1.25, cursor: 'pointer',
+                      borderLeft: isActive ? '3px solid #6366f1' : '3px solid transparent',
+                      bgcolor: isActive ? '#f5f3ff' : 'transparent',
+                      borderBottom: '1px solid #f1f5f9',
+                      '&:hover': { bgcolor: isActive ? '#f5f3ff' : '#f8fafc' },
+                      display: 'flex', alignItems: 'flex-start', gap: 1,
+                    }}
+                  >
+                    <Box sx={{ mt: 0.6, width: 7, height: 7, borderRadius: '50%', bgcolor: STATUS_CONFIG[init.status]?.dot || '#94a3b8', flexShrink: 0 }} />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={isActive ? 600 : 500} color={isActive ? '#4f46e5' : 'text.primary'} noWrap>
+                        {init.title}
                       </Typography>
+                      <Box display="flex" alignItems="center" gap={0.75} mt={0.25}>
+                        <Box sx={{ width: 3, height: 10, bgcolor: PRIORITY_COLORS[init.priority] || '#94a3b8', borderRadius: 1 }} />
+                        <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.68rem' }}>
+                          {init.priority?.charAt(0) + init.priority?.slice(1).toLowerCase()}
+                          {childCount > 0 && ` · ${childCount} child${childCount !== 1 ? 'ren' : ''}`}
+                        </Typography>
+                      </Box>
                     </Box>
                   </Box>
-                </Box>
-              );
-            })}
-          </Box>
-            </>
-          )}
-        </Box>
-
-        {/* ── RIGHT PANEL ────────────────────────────────────────────────── */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {/* Mini toolbar */}
-          <Box sx={{ px: 2, py: 1.25, borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-            <Box>
-              <Typography variant="subtitle1" fontWeight={700}>
-                {selectedRootId ? rootInitiatives.find(i => i.id === selectedRootId)?.title : 'All initiatives'}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {selectedDisplayItems.length} item{selectedDisplayItems.length !== 1 ? 's' : ''} · drag to rearrange
-              </Typography>
-            </Box>
-            <Box display="flex" gap={1} alignItems="center">
-              <Tooltip title="Export as image">
-                <span>
-                  <IconButton
-                    onClick={e => setExportMenuAnchor(e.currentTarget)}
-                    disabled={exporting}
-                    size="small"
-                    sx={{ border: '1px solid #e2e8f0', borderRadius: 1.5, color: 'text.secondary' }}
-                  >
-                    {exporting ? <CircularProgress size={16} /> : <Download fontSize="small" />}
-                  </IconButton>
-                </span>
-              </Tooltip>
-              <MuiMenu
-                anchorEl={exportMenuAnchor}
-                open={Boolean(exportMenuAnchor)}
-                onClose={() => setExportMenuAnchor(null)}
-                PaperProps={{ sx: { borderRadius: 2, minWidth: 200, boxShadow: '0 4px 20px rgba(0,0,0,0.12)' } }}
-              >
-                <MuiMenuItem dense onClick={handleExportImage} sx={{ gap: 1.5 }}>
-                  <SelectAll sx={{ fontSize: 18, color: 'text.secondary' }} />
-                  <Box>
-                    <Typography variant="body2" fontWeight={500}>Export all</Typography>
-                    <Typography variant="caption" color="text.secondary">Save entire mind map</Typography>
-                  </Box>
-                </MuiMenuItem>
-                <MuiMenuItem
-                  dense
-                  onClick={handleExportSelected}
-                  disabled={selectedNodeIds.length === 0}
-                  sx={{ gap: 1.5 }}
-                >
-                  <CropFree sx={{ fontSize: 18, color: 'text.secondary' }} />
-                  <Box>
-                    <Typography variant="body2" fontWeight={500}>
-                      Export selected{selectedNodeIds.length > 0 ? ` (${selectedNodeIds.length})` : ''}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {selectedNodeIds.length === 0 ? 'Select nodes first' : 'Save selected nodes only'}
-                    </Typography>
-                  </Box>
-                </MuiMenuItem>
-              </MuiMenu>
-              <Tooltip title="Auto-arrange: clean up layout, keeping trees near their current positions">
-                <IconButton
-                  onClick={autoArrange}
-                  size="small"
-                  sx={{ border: '1px solid #e2e8f0', borderRadius: 1.5, color: 'text.secondary' }}
-                >
-                  <AutoFixHigh fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Refresh">
-                <IconButton
-                  onClick={() => dispatch(fetchAllInitiatives({ canvasId: activeCanvasId }))}
-                  size="small"
-                  sx={{ border: '1px solid #e2e8f0', borderRadius: 1.5, color: 'text.secondary' }}
-                >
-                  <Refresh fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
-                <IconButton
-                  onClick={toggleFullscreen}
-                  size="small"
-                  sx={{ border: '1px solid #e2e8f0', borderRadius: 1.5, color: isFullscreen ? '#6366f1' : 'text.secondary' }}
-                >
-                  {isFullscreen ? <FullscreenExit fontSize="small" /> : <Fullscreen fontSize="small" />}
-                </IconButton>
-              </Tooltip>
-              <Chip
-                label={showCompleted ? 'Hiding completed' : 'Show completed'}
-                size="small"
-                onClick={() => setShowCompleted(v => !v)}
-                color={showCompleted ? 'primary' : 'default'}
-                variant={showCompleted ? 'filled' : 'outlined'}
-                sx={{ cursor: 'pointer', fontWeight: 500 }}
-              />
-              <Button
-                variant="outlined"
-                startIcon={<ListIcon />}
-                onClick={() => navigate('/initiatives')}
-              >
-                List View
-              </Button>
+                );
+              })}
             </Box>
           </Box>
-
-          {/* React Flow canvas */}
-          <Box sx={{ flex: 1, overflow: 'hidden', bgcolor: '#f5f6fa' }}>
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              nodeTypes={NODE_TYPES}
-              onNodeDragStop={onNodeDragStop}
-              onNodeDoubleClick={onNodeDoubleClick}
-              onSelectionChange={({ nodes: sel }) => setSelectedNodeIds((sel || []).map(n => n.id))}
-              selectionOnDrag
-              panOnDrag={[1, 2]}
-              multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
-              selectionKeyCode={null}
-              onMoveEnd={onMoveEnd}
-              minZoom={0.08}
-              maxZoom={2}
-              defaultEdgeOptions={{ type: 'smoothstep' }}
-            >
-              <Background variant="dots" color="#c7d2fe" gap={28} size={1.5} />
-              <Controls
-                style={{
-                  boxShadow: '0 2px 12px rgba(0,0,0,0.1)',
-                  borderRadius: 10,
-                  border: '1px solid #e2e8f0',
-                  overflow: 'hidden',
-                }}
-              />
-              <MiniMap
-                nodeColor={(node) => STATUS_CONFIG[node.data?.initiative?.status]?.dot || '#94a3b8'}
-                maskColor="rgba(99,102,241,0.06)"
-                style={{ borderRadius: 10, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
-              />
-              {allItems.length === 0 && (
-                <Panel position="top-center">
-                  <Box sx={{ bgcolor: 'white', p: 3, borderRadius: 3, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', textAlign: 'center', border: '1px solid #e2e8f0' }}>
-                    <Typography variant="body2" color="text.secondary" mb={1.5}>No initiatives yet.</Typography>
-                    <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setCreateDialogOpen(true)}>
-                      Create First Initiative
-                    </Button>
-                  </Box>
-                </Panel>
-              )}
-              <Panel position="bottom-center">
-                <Box sx={{ bgcolor: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(6px)', border: '1px solid #e2e8f0', borderRadius: 6, px: 1.75, py: 0.5, display: 'flex', gap: 2 }}>
-                  <Typography variant="caption" color="text.disabled">Drag canvas to select · Shift+click to add · Double-click to open</Typography>
-                </Box>
-              </Panel>
-            </ReactFlow>
-          </Box>
-
-          {/* Legend */}
-          <Box
-            display="flex" gap={1} flexWrap="wrap" alignItems="center"
-            sx={{ px: 2, py: 0.75, bgcolor: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(8px)', borderTop: '1px solid #f1f5f9' }}
-          >
-            {Object.entries(STATUS_CONFIG).map(([status, cfg]) => (
-              <Box key={status} display="flex" alignItems="center" gap={0.5}>
-                <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: cfg.dot }} />
-                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>{cfg.label}</Typography>
-              </Box>
-            ))}
-            <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-            {Object.entries(PRIORITY_COLORS).map(([p, color]) => (
-              <Box key={p} display="flex" alignItems="center" gap={0.4}>
-                <Box sx={{ width: 3, height: 12, bgcolor: color, borderRadius: 1 }} />
-                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>{p.charAt(0) + p.slice(1).toLowerCase()}</Typography>
-              </Box>
-            ))}
-          </Box>
-        </Box>
+        )}
       </Box>
 
       {/* Detail Drawer (full tabs: Overview, Links, Comments, Activity) */}

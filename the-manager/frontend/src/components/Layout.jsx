@@ -2,14 +2,13 @@ import { Outlet } from 'react-router-dom';
 import {
   Box, Typography, Button, Drawer, List, ListItem,
   ListItemButton, ListItemIcon, ListItemText, IconButton,
-  Avatar, Divider, Tooltip, AppBar, Toolbar, Container, CircularProgress,
+  Avatar, Divider, Tooltip, AppBar, Toolbar, Container,
 } from '@mui/material';
 import {
   Dashboard as DashboardIcon, List as ListIcon, Logout, Menu as MenuIcon,
   AccountTree, CheckBox as TasksIcon, People as PeopleIcon,
   NoteAlt, EventNote, FeedOutlined, Groups,
   Settings as SettingsIcon, ChevronLeft, ChevronRight, HelpOutline,
-  SyncAlt, CloudOff, CheckCircle,
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -32,18 +31,6 @@ export default function Layout() {
   const { user } = useSelector((state) => state.auth);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // ── Sync state ────────────────────────────────────────────────────────────
-  const [syncStatus, setSyncStatus]   = useState(null); // null | { configured, lastPushAt, lastPullAt }
-  const [pushing, setPushing]         = useState(false);
-  const [pulling, setPulling]         = useState(false);
-  const [pushResult, setPushResult]   = useState(null); // 'ok' | 'error'
-  const [pullResult, setPullResult]   = useState(null); // 'ok' | 'error'
-
-  // Load sync status once on mount
-  useEffect(() => {
-    api.get('/sync/status').then(r => setSyncStatus(r.data)).catch(() => {});
-  }, []);
-
   // ── Feature flags (from Setup → Features toggles) ──────────────────────
   const [jiraEnabled,      setJiraEnabled]      = useState(false);
   const [aiEnabled,        setAiEnabled]        = useState(false);
@@ -56,42 +43,6 @@ export default function Layout() {
       })
       .catch(() => {});
   }, [location.pathname]); // re-fetch on every navigation so toggles take effect immediately
-
-  const handlePush = useCallback(async () => {
-    if (pushing || pulling) return;
-    setPushing(true); setPushResult(null);
-    try {
-      const r = await api.post('/sync/push');
-      setSyncStatus(s => ({ ...s, lastPushAt: r.data.pushedAt }));
-      setPushResult('ok');
-    } catch (e) {
-      const msg = e?.response?.data?.error || e?.message || 'Push failed';
-      console.error('[sync/push]', msg);
-      setPushResult({ type: 'error', msg });
-    } finally {
-      setPushing(false);
-      setTimeout(() => setPushResult(null), 8000);
-    }
-  }, [pushing, pulling]);
-
-  const handlePull = useCallback(async () => {
-    if (pushing || pulling) return;
-    setPulling(true); setPullResult(null);
-    try {
-      const r = await api.post('/sync/pull');
-      setSyncStatus(s => ({ ...s, lastPullAt: r.data.pulledAt }));
-      setPullResult('ok');
-      // Reload page so all in-memory Redux state refreshes from new DB data
-      setTimeout(() => window.location.reload(), 800);
-    } catch (e) {
-      const msg = e?.response?.data?.error || e?.message || 'Pull failed';
-      console.error('[sync/pull]', msg);
-      setPullResult({ type: 'error', msg });
-    } finally {
-      setPulling(false);
-      setTimeout(() => setPullResult(null), 8000);
-    }
-  }, [pushing, pulling]);
 
   // Persist collapsed state across sessions
   const [collapsed, setCollapsed] = useState(() => {
@@ -198,74 +149,6 @@ export default function Layout() {
 
       <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)', mx: collapsed ? 1 : 2 }} />
 
-      {/* Sync buttons — only shown when Turso is configured */}
-      {syncStatus?.configured && (() => {
-        const busy = pushing || pulling;
-        const isErr = (r) => r && typeof r === 'object' && r.type === 'error';
-        const SyncBtn = ({ label, shortLabel, icon, loading, result, onClick, tooltipLabel }) => (
-          <Tooltip
-            title={collapsed ? (isErr(result) ? `${shortLabel} failed: ${result.msg}` : tooltipLabel) : (isErr(result) ? result.msg : '')}
-            placement="right" arrow
-          >
-            <Box
-              onClick={busy ? undefined : onClick}
-              sx={{
-                display: 'flex', alignItems: 'center', gap: 1,
-                px: collapsed ? 0.75 : 1.25, py: 0.65,
-                borderRadius: 2,
-                cursor: busy ? 'default' : 'pointer',
-                opacity: busy && !loading ? 0.45 : 1,
-                bgcolor:
-                  result === 'ok'  ? 'rgba(34,197,94,0.15)'
-                  : isErr(result)  ? 'rgba(239,68,68,0.15)'
-                  : 'rgba(255,255,255,0.05)',
-                '&:hover': !busy ? {
-                  bgcolor: result === 'ok' ? 'rgba(34,197,94,0.22)'
-                    : isErr(result)        ? 'rgba(239,68,68,0.22)'
-                    : 'rgba(255,255,255,0.10)',
-                } : {},
-                transition: 'background 0.2s',
-              }}
-            >
-              {loading ? (
-                <CircularProgress size={15} sx={{ color: '#a5b4fc', flexShrink: 0 }} />
-              ) : result === 'ok' ? (
-                <CheckCircle sx={{ fontSize: 15, color: '#4ade80', flexShrink: 0 }} />
-              ) : isErr(result) ? (
-                <CloudOff sx={{ fontSize: 15, color: '#f87171', flexShrink: 0 }} />
-              ) : icon}
-              {!collapsed && (
-                <Typography variant="caption" sx={{
-                  color: result === 'ok' ? '#4ade80' : isErr(result) ? '#f87171' : SIDEBAR_TEXT,
-                  fontSize: '0.72rem', whiteSpace: 'nowrap',
-                }}>
-                  {loading ? `${label}ing…` : result === 'ok' ? `${shortLabel} ✓` : isErr(result) ? `${shortLabel} failed` : label}
-                </Typography>
-              )}
-            </Box>
-          </Tooltip>
-        );
-        return (
-          <Box sx={{ px: 1, pb: 0.5, display: 'flex', flexDirection: collapsed ? 'column' : 'row', gap: 0.5 }}>
-            <SyncBtn
-              label="Push" shortLabel="Pushed"
-              icon={<SyncAlt sx={{ fontSize: 15, color: SIDEBAR_TEXT, flexShrink: 0, transform: 'scaleX(-1)' }} />}
-              loading={pushing} result={pushResult}
-              onClick={handlePush}
-              tooltipLabel={syncStatus.lastPushAt ? `Push  ·  last ${new Date(syncStatus.lastPushAt).toLocaleTimeString()}` : 'Push local → Turso'}
-            />
-            <SyncBtn
-              label="Pull" shortLabel="Pulled"
-              icon={<SyncAlt sx={{ fontSize: 15, color: SIDEBAR_TEXT, flexShrink: 0 }} />}
-              loading={pulling} result={pullResult}
-              onClick={handlePull}
-              tooltipLabel={syncStatus.lastPullAt ? `Pull  ·  last ${new Date(syncStatus.lastPullAt).toLocaleTimeString()}` : 'Pull Turso → local'}
-            />
-          </Box>
-        );
-      })()}
-
-      <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)', mx: collapsed ? 1 : 2 }} />
       <Box sx={{ display: 'flex', justifyContent: collapsed ? 'center' : 'flex-end', px: 1, py: 0.75 }}>
         <Tooltip title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} placement="right" arrow>
           <IconButton
