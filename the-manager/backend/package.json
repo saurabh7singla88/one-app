@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
+    "build:bundle": "node -e \"require('esbuild').buildSync({entryPoints:['src/server.js'],bundle:true,platform:'node',target:'node20',format:'esm',outfile:'src/server.bundle.mjs',external:['@prisma/client','.prisma/client','bcrypt'],banner:{js:\\\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\\\"},minify:false})\"",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate"
@@ -33,6 +34,7 @@
     "mailparser": "^3.9.3"
   },
   "devDependencies": {
+    "esbuild": "^0.27.4",
     "prisma": "^7.8.0"
   }
 }

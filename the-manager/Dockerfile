@@ -9,26 +9,45 @@ ARG VITE_API_URL=/api
 ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
-# ─── Stage 2: Backend runtime ─────────────────────────────────────────────────
-FROM node:20-alpine AS backend
+# ─── Stage 2: Bundle backend (source stays in this stage only) ────────────────
+FROM node:20-alpine AS backend-build
 WORKDIR /app
 
-# Install only production dependencies
+# Install all deps including devDeps (esbuild + prisma CLI)
 COPY backend/package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci
 
-# Copy backend source
+# Copy source and schema
 COPY backend/src ./src
 COPY backend/prisma ./prisma
 
-# Generate Prisma client (targeting the linux/alpine native binary)
+# Generate Prisma client targeting linux/alpine
 RUN npx prisma generate
 
-# Copy frontend build output into a folder served as static files by the backend
+# Bundle everything into a single CJS file; raw source is not copied forward
+RUN npm run build:bundle
+
+# ─── Stage 3: Backend runtime (no source files) ───────────────────────────────
+FROM node:20-alpine AS backend
+WORKDIR /app
+
+# Install production deps only (bcrypt native addon, @prisma/client runtime)
+COPY backend/package*.json ./
+RUN npm ci --omit=dev
+
+# Copy the generated Prisma query-engine binary from the build stage
+COPY --from=backend-build /app/node_modules/.prisma ./node_modules/.prisma
+
+# Copy the bundled server into src/ so import.meta.url-based relative paths
+# (../public, ../prisma/migrations) resolve identically to the original source layout
+COPY --from=backend-build /app/src/server.bundle.mjs ./src/server.bundle.mjs
+
+# Migrations directory — needed when running with a local SQLite file
+COPY backend/prisma ./prisma
+
+# Copy frontend build output served as static files by the backend
 COPY --from=frontend-build /app/frontend/dist ./public
 
 EXPOSE 47421
 
-# Migrations are managed via the desktop app's Turso push.
-# Just start the server directly.
-CMD ["node", "src/server.js"]
+CMD ["node", "src/server.bundle.mjs"]

@@ -8,6 +8,7 @@
     "docker:build":   "docker compose up --build -d",
     "docker:restart": "docker compose restart",
     "docker:logs":    "docker compose logs -f --tail=50",
-    "docker:ps":      "docker compose ps"
+    "docker:ps":      "docker compose ps",
+    "docker:publish": "docker compose build && docker tag the-manager-app:latest nebrix001/one-app:latest && docker push nebrix001/one-app:latest"
   }
 }
