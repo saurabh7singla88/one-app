@@ -9,7 +9,7 @@ import {
 import {
   Add, Delete, Lock, LockOpen, LockOutlined, Search, Clear,
   NoteAlt, CheckCircle, ChevronRight, ExpandMore, SubdirectoryArrowRight,
-  Dashboard,
+  Dashboard, EnhancedEncryption,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import api from '../api/axios';
@@ -150,7 +150,7 @@ function PasswordMgmtDialog({ open, hasPassword, onClose, onSuccess }) {
 }
 
 // ── Unlock screen ─────────────────────────────────────────────────────────────
-function UnlockScreen({ onUnlocked }) {
+function UnlockScreen({ onUnlocked, encryptionEnabled }) {
   const [pw, setPw] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -173,6 +173,13 @@ function UnlockScreen({ onUnlocked }) {
       <Lock sx={{ fontSize: 56, color: '#94a3b8' }} />
       <Typography variant="h6" fontWeight={700} color="text.secondary">Notes are protected</Typography>
       <Typography variant="body2" color="text.disabled">Enter your password to unlock</Typography>
+      {encryptionEnabled && (
+        <Box display="flex" alignItems="center" gap={0.75} px={1.5} py={0.75}
+          sx={{ bgcolor: '#f0f4ff', borderRadius: 1.5, border: '1px solid #e0e7ff' }}>
+          <EnhancedEncryption sx={{ fontSize: 15, color: '#6366f1', flexShrink: 0 }} />
+          <Typography variant="caption" sx={{ color: '#4f46e5' }}>Protected notes are AES-256-GCM encrypted at rest</Typography>
+        </Box>
+      )}
       <Box display="flex" flexDirection="column" alignItems="center" gap={1.5} width={280}>
         <TextField
           autoFocus fullWidth type="password" label="Password" size="small"
@@ -191,7 +198,7 @@ function UnlockScreen({ onUnlocked }) {
   );
 }
 // ── Per-note unlock dialog ──────────────────────────────────────────────
-function NoteUnlockDialog({ note, open, onClose, onUnlocked }) {
+function NoteUnlockDialog({ note, open, onClose, onUnlocked, encryptionEnabled }) {
   const [pw, setPw] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -220,9 +227,18 @@ function NoteUnlockDialog({ note, open, onClose, onUnlocked }) {
         <Lock sx={{ color: '#6366f1', fontSize: 20 }} /> Unlock note
       </DialogTitle>
       <DialogContent sx={{ pt: 1 }}>
-        <Typography variant="body2" color="text.secondary" mb={2}>
-          “{note?.title}” is protected. Enter your login password to open it.
+        <Typography variant="body2" color="text.secondary" mb={encryptionEnabled ? 1.5 : 2}>
+          "{note?.title}" is protected. Enter your login password to open it.
         </Typography>
+        {encryptionEnabled && (
+          <Box display="flex" alignItems="center" gap={0.75} mb={2} px={1.25} py={0.75}
+            sx={{ bgcolor: '#f0f4ff', borderRadius: 1.5, border: '1px solid #e0e7ff' }}>
+            <EnhancedEncryption sx={{ fontSize: 15, color: '#6366f1', flexShrink: 0 }} />
+            <Typography variant="caption" sx={{ color: '#4f46e5', lineHeight: 1.4 }}>
+              Content is AES-256-GCM encrypted at rest
+            </Typography>
+          </Box>
+        )}
         <TextField
           autoFocus fullWidth type="password" label="Password" size="small"
           value={pw} onChange={e => { setPw(e.target.value); setError(''); }}
@@ -370,6 +386,7 @@ export default function Notes() {
 
   // Global password state
   const [hasPassword, setHasPassword] = useState(false);
+  const [encryptionEnabled, setEncryptionEnabled] = useState(false);
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pwMgmtOpen, setPwMgmtOpen] = useState(false);
 
@@ -404,6 +421,7 @@ export default function Notes() {
     dispatch(fetchCanvases());
     api.get('/notes/settings').then(r => {
       setHasPassword(r.data.hasPassword);
+      setEncryptionEnabled(!!r.data.encryptionEnabled);
       if (!r.data.hasPassword) setIsUnlocked(true);
     }).catch(console.error);
   }, [dispatch]);
@@ -706,7 +724,7 @@ export default function Notes() {
         {/* ── Right panel ── */}
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {!isUnlocked ? (
-            <UnlockScreen onUnlocked={() => { setIsUnlocked(true); fetchNotes(); }} />
+            <UnlockScreen onUnlocked={() => { setIsUnlocked(true); fetchNotes(); }} encryptionEnabled={encryptionEnabled} />
           ) : !editorNote ? (
             <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="100%" color="text.disabled">
               <NoteAlt sx={{ fontSize: 56, mb: 2 }} />
@@ -742,12 +760,25 @@ export default function Notes() {
                     </Tooltip>
                   );
                 })()}
-                <Tooltip title={editorNote.isProtected ? 'Remove protection' : 'Lock note (uses login password)'}>
+                <Tooltip title={editorNote.isProtected ? (encryptionEnabled ? 'Protected — content AES-256 encrypted at rest. Click to remove.' : 'Protected. Click to remove.') : 'Lock note (uses login password)'}>
                   <IconButton size="small" onClick={handleToggleLock}
                     sx={{ color: editorNote.isProtected ? '#6366f1' : 'text.disabled', '&:hover': { color: '#6366f1', bgcolor: '#f0f4ff' }, borderRadius: 1.5 }}>
                     {editorNote.isProtected ? <Lock sx={{ fontSize: 17 }} /> : <LockOpen sx={{ fontSize: 17 }} />}
                   </IconButton>
                 </Tooltip>
+                {editorNote.isProtected && encryptionEnabled && (
+                  <Tooltip title="Note content is AES-256-GCM encrypted before storing in the database">
+                    <Chip
+                      icon={<EnhancedEncryption sx={{ fontSize: '13px !important' }} />}
+                      label="Encrypted"
+                      size="small"
+                      sx={{ height: 20, fontSize: '0.65rem', bgcolor: '#f0f4ff', color: '#4f46e5', border: '1px solid #c7d2fe', cursor: 'default',
+                        '& .MuiChip-icon': { color: '#6366f1', ml: '6px' },
+                        '& .MuiChip-label': { px: '6px' },
+                      }}
+                    />
+                  </Tooltip>
+                )}
                 <Tooltip title="Delete note (and all children)">
                   <IconButton size="small" onClick={() => setDeleteConfirm(true)} sx={{ color: 'text.disabled', '&:hover': { color: '#dc2626', bgcolor: '#fef2f2' }, borderRadius: 1.5 }}>
                     <Delete sx={{ fontSize: 17 }} />
@@ -894,6 +925,7 @@ export default function Notes() {
         open={!!unlockTarget}
         onClose={() => setUnlockTarget(null)}
         onUnlocked={handleNoteUnlocked}
+        encryptionEnabled={encryptionEnabled}
       />
 
       {/* Canvas assignment menu */}
