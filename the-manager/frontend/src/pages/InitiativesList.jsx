@@ -223,9 +223,9 @@ export default function InitiativesList() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, items]);
 
-  // Search + filters
+  // Search + filters (pre-populate status from ?status= URL param, e.g. from Dashboard cards)
   const [searchText, setSearchText] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
+  const [filterStatus, setFilterStatus] = useState(() => searchParams.get('status') || '');
   const [filterPriority, setFilterPriority] = useState('');
   const searchTimer = useRef(null);
 

@@ -111,7 +111,7 @@ function PasswordMgmtDialog({ open, hasPassword, onClose, onSuccess }) {
               <TextField
                 autoFocus fullWidth type="password" label="Current password"
                 value={current} onChange={e => setCurrent(e.target.value)}
-                inputProps={{ autoComplete: 'off' }}
+                inputProps={{ autoComplete: 'new-password' }}
                 onKeyDown={e => { if (e.key === 'Enter' && step === 'remove') submit(); }}
               />
             )}
@@ -119,14 +119,14 @@ function PasswordMgmtDialog({ open, hasPassword, onClose, onSuccess }) {
               <TextField
                 autoFocus={step === 'set'} fullWidth type="password" label="New password"
                 value={next} onChange={e => { setNext(e.target.value); setError(''); }}
-                inputProps={{ autoComplete: 'off' }}
+                inputProps={{ autoComplete: 'new-password' }}
               />
             )}
             {(step === 'set' || step === 'change') && (
               <TextField
                 fullWidth type="password" label="Confirm new password"
                 value={confirm} onChange={e => { setConfirm(e.target.value); setError(''); }}
-                inputProps={{ autoComplete: 'off' }}
+                inputProps={{ autoComplete: 'new-password' }}
                 error={!!error && error === 'Passwords do not match'}
                 onKeyDown={e => { if (e.key === 'Enter') submit(); }}
               />
@@ -185,7 +185,7 @@ function UnlockScreen({ onUnlocked, encryptionEnabled }) {
           autoFocus fullWidth type="password" label="Password" size="small"
           value={pw} onChange={e => setPw(e.target.value)}
           error={!!error} helperText={error || ''}
-          inputProps={{ autoComplete: 'off' }}
+          inputProps={{ autoComplete: 'new-password' }}
           onKeyDown={e => { if (e.key === 'Enter') submit(); }}
         />
         <Button fullWidth variant="contained" onClick={submit} disabled={loading || !pw}
@@ -243,7 +243,7 @@ function NoteUnlockDialog({ note, open, onClose, onUnlocked, encryptionEnabled }
           autoFocus fullWidth type="password" label="Password" size="small"
           value={pw} onChange={e => { setPw(e.target.value); setError(''); }}
           error={!!error} helperText={error || ''}
-          inputProps={{ autoComplete: 'off' }}
+          inputProps={{ autoComplete: 'new-password' }}
           onKeyDown={e => { if (e.key === 'Enter') submit(); }}
         />
       </DialogContent>
@@ -638,6 +638,7 @@ export default function Notes() {
             <TextField
               size="small" fullWidth placeholder="Search notes…" value={search}
               onChange={e => setSearch(e.target.value)} disabled={!isUnlocked}
+              inputProps={{ autoComplete: 'off' }}
               InputProps={{
                 startAdornment: <InputAdornment position="start"><Search sx={{ fontSize: 16, color: 'text.disabled' }} /></InputAdornment>,
                 endAdornment: search ? (
