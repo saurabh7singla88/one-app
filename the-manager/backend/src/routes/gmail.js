@@ -97,6 +97,21 @@ router.put('/settings', async (req, res) => {
   }
 });
 
+// ── DELETE /api/gmail/settings ───────────────────────────────────────────────
+// Removes saved credentials from the database (env-sourced credentials are unaffected).
+router.delete('/settings', async (req, res) => {
+  try {
+    await prisma.appSetting.deleteMany({
+      where: { key: { in: ['gmail_user', 'gmail_app_password'] } },
+    });
+    logger.info('Gmail credentials removed');
+    res.json({ ok: true });
+  } catch (e) {
+    logger.error('Failed to remove Gmail settings', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── GET /api/gmail/test-config  ───────────────────────────────────────────────
 // Quick connection test — returns success/error without exposing credentials.
 router.get('/test-config', async (req, res) => {
