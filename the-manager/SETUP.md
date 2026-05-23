@@ -1,123 +1,116 @@
-# Quick Setup Guide
+# Setup Guide
 
-Follow these steps to get the Initiative Tracker running:
+## Prerequisites
 
-## 1. Install Dependencies
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
+- A free [Turso](https://turso.tech) account (cloud SQLite — free tier is sufficient)
 
-### Backend
-```powershell
-cd backend
-npm install
+---
+
+## 1. Create your database
+
+Sign up at https://turso.tech, then run the Turso CLI:
+
+```bash
+turso db create one-app
+turso db show one-app          # copy the URL
+turso db tokens create one-app # copy the auth token
 ```
 
-### Frontend
-```powershell
-cd frontend
-npm install
+---
+
+## 2. Configure environment variables
+
+```bash
+cp .env.example .env
 ```
 
-## 2. Set Up Database
+Edit `.env` and fill in the three required values:
 
-Install PostgreSQL if you don't have it:
-- Download from https://www.postgresql.org/download/windows/
-- Or use Docker: `docker run --name postgres -e POSTGRES_PASSWORD=password -p 5432:5432 -d postgres`
-
-Create the database:
-```powershell
-# Using psql
-psql -U postgres
-CREATE DATABASE initiative_tracker;
-\q
-```
-
-## 3. Configure Backend
-
-Create `.env` file in the backend folder:
-```powershell
-cd backend
-Copy-Item .env.example .env
-```
-
-Edit `backend\.env`:
 ```env
-DATABASE_URL="postgresql://postgres:password@localhost:5432/initiative_tracker?schema=public"
-JWT_SECRET="your-super-secret-key-change-in-production"
-JWT_EXPIRES_IN="7d"
-PORT=47421
-NODE_ENV=development
-ALLOWED_ORIGINS="http://localhost:5173"
+TURSO_DATABASE_URL=libsql://your-db-name.turso.io
+TURSO_AUTH_TOKEN=your-turso-auth-token
+JWT_SECRET=any-long-random-string
 ```
 
-## 4. Initialize Database
+Generate a strong `JWT_SECRET` if you need one:
 
-```powershell
-cd backend
-npx prisma migrate dev --name init
-npx prisma generate
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-## 5. Start the Application
+---
 
-### Terminal 1 - Backend
-```powershell
-cd backend
-npm run dev
+## 3. Start the app
+
+```bash
+npm run docker:build
 ```
 
-Backend should start on: http://localhost:47421
+This builds the image, runs all database migrations automatically, and starts the container.
+Open **http://localhost:3000** in your browser.
 
-### Terminal 2 - Frontend
-```powershell
-cd frontend
-npm run dev
+---
+
+## 4. Register your account
+
+Click **Register** on the login page to create your first account. No pre-seeded users exist.
+
+---
+
+## 5. Configure optional features (in-app)
+
+Everything below is configured through **Setup** in the sidebar — no `.env` changes needed:
+
+| Feature | Setup section | What to provide |
+|---|---|---|
+| AI priority scoring & summaries | AI Model | Provider (Ollama / OpenAI / Gemini / compatible), API key, model |
+| Meeting Notes | Gmail | Gmail address, App Password, Gmail label name |
+| Team Board | JIRA | JIRA base URL, email, API token |
+
+Features not configured simply stay disabled and are hidden from the sidebar.
+
+---
+
+## Optional: encrypt stored Gmail password
+
+If you use Meeting Notes and want the Gmail app-password stored encrypted in the database, add a `TOKEN_ENCRYPTION_KEY` to `.env`:
+
+```bash
+# Generate a 64-char hex key
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-Frontend should start on: http://localhost:5173
+```env
+TOKEN_ENCRYPTION_KEY=your-64-char-hex-string
+```
 
-## 6. First Time Use
+Then rebuild: `npm run docker:build`. Without this key the password is stored in plaintext.
 
-1. Open browser to http://localhost:5173
-2. Click "Register here"
-3. Create your account
-4. Start creating initiatives!
+---
+
+## Useful commands
+
+| Command | What it does |
+|---|---|
+| `npm run docker:build` | Build image + start (or restart after code changes) |
+| `npm run docker:logs` | Tail container logs |
+| `npm run docker:down` | Stop the container |
+| `npm run docker:restart` | Restart without rebuilding |
+
+---
 
 ## Troubleshooting
 
-### Database Connection Error
-- Make sure PostgreSQL is running
-- Check DATABASE_URL in `.env`
-- Verify database exists: `psql -U postgres -l`
+**Container starts but app is blank / API errors**
+- Run `npm run docker:logs` and look for migration or connection errors.
+- Confirm `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are correct in `.env`.
 
-### Port Already in Use
-- Backend: Change PORT in `.env`
-- Frontend: Change port in `vite.config.js`
+**Port 3000 already in use**
+- Edit `docker-compose.yml` and change `"3000:47421"` to e.g. `"3001:47421"`, then rebuild.
 
-### Prisma Errors
-```powershell
-cd backend
-npx prisma generate
-npx prisma migrate reset  # Warning: This will delete all data!
-```
-
-### Clear and Restart
-```powershell
-# Backend
-cd backend
-Remove-Item -Recurse -Force node_modules
-npm install
-npx prisma generate
-
-# Frontend
-cd frontend
-Remove-Item -Recurse -Force node_modules
-npm install
-```
-
-## Running Prisma Studio (Database GUI)
-
-```powershell
-cd backend
-npx prisma studio
+**Forgot JWT_SECRET after data exists**
+- Sessions will be invalidated (users must log in again) but data is unaffected. Update `.env` and rebuild.
 ```
 
 Opens at http://localhost:5555

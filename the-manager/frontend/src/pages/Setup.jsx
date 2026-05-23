@@ -812,13 +812,12 @@ function JiraSection() {
 
 // ─── Turso Sync Section ───────────────────────────────────────────────────────
 function TursoSection() {
-  const [status, setStatus]         = useState(null);  // { configured, databaseUrl, lastSyncAt }
-  const [loading, setLoading]       = useState(true);
-  const [saving, setSaving]         = useState(false);
-  const [removing, setRemoving]     = useState(false);
-  const [saved, setSaved]           = useState(false);
-  const [error, setError]           = useState('');
-  const [showToken, setShowToken]   = useState(false);
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving]   = useState(false);
+  const [saved, setSaved]     = useState(false);
+  const [error, setError]     = useState('');
+  const [showToken, setShowToken] = useState(false);
   const [form, setForm] = useState({ databaseUrl: '', authToken: '' });
 
   const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }));
@@ -836,88 +835,57 @@ function TursoSection() {
       setSaved(true);
     } catch (e) {
       setError(e.response?.data?.error || 'Failed to save credentials.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const remove = async () => {
-    setError(''); setRemoving(true);
-    try {
-      await api.delete('/sync/config');
-      setStatus(s => ({ ...s, configured: false, databaseUrl: null }));
-      setSaved(false);
-      setForm({ databaseUrl: '', authToken: '' });
-    } catch (e) {
-      setError(e.response?.data?.error || 'Failed to remove credentials.');
-    } finally {
-      setRemoving(false);
-    }
+    } finally { setSaving(false); }
   };
 
   if (loading) return <CircularProgress size={24} />;
 
+  // ── Connected via environment variables (Docker / server deployment) ──────
+  // The database URL comes from TURSO_DATABASE_URL env var set at deploy time.
+  // Credentials cannot be changed here — update your .env and rebuild.
+  if (status?.configured) {
+    return (
+      <Box display="flex" flexDirection="column" gap={2}>
+        <Alert severity="success" icon={<CheckCircleOutline />} sx={{ borderRadius: 2 }}>
+          <strong>Connected</strong> — using database{' '}
+          <code style={{ fontSize: '0.8em' }}>{status.databaseUrl}</code>
+        </Alert>
+        <Alert severity="info" icon={false} sx={{ borderRadius: 2, bgcolor: '#f8faff', border: '1px solid #e0e7ff' }}>
+          <Typography variant="caption" color="text.secondary">
+            The database connection is configured via environment variables (<code>TURSO_DATABASE_URL</code> / <code>TURSO_AUTH_TOKEN</code>).
+            To change the database, update your <code>.env</code> file and run <code>npm run docker:build</code>.
+          </Typography>
+        </Alert>
+      </Box>
+    );
+  }
+
+  // ── Not configured — show setup form (Electron / local dev scenario) ──────
   return (
     <Box display="flex" flexDirection="column" gap={2.5}>
-      {/* Status chip */}
-      {status?.configured ? (
-        <Alert
-          severity="success"
-          icon={<CheckCircleOutline />}
-          sx={{ borderRadius: 2 }}
-          action={
-            <Button color="error" size="small" onClick={remove} disabled={removing}
-              sx={{ textTransform: 'none', fontWeight: 600 }}
-            >
-              {removing ? 'Removing…' : 'Disconnect'}
-            </Button>
-          }
-        >
-          Connected to Turso: <strong>{status.databaseUrl}</strong>
-          {(status.lastPushAt || status.lastPullAt) && (
-            <><br />
-              {status.lastPushAt && <small>Last push: {new Date(status.lastPushAt).toLocaleString()}</small>}
-              {status.lastPushAt && status.lastPullAt && <span> · </span>}
-              {status.lastPullAt && <small>Last pull: {new Date(status.lastPullAt).toLocaleString()}</small>}
-            </>
-          )}
-        </Alert>
-      ) : (
-        <Alert severity="info" icon={<CloudOff />} sx={{ borderRadius: 2 }}>
-          Not connected. Enter your Turso database URL and auth token below to enable cross-device sync.
-        </Alert>
-      )}
+      <Alert severity="warning" icon={<CloudOff />} sx={{ borderRadius: 2 }}>
+        No database configured. Add your Turso credentials below.
+      </Alert>
 
-      {/* How to get credentials */}
       <Alert severity="info" icon={false} sx={{ borderRadius: 2, bgcolor: '#f8faff', border: '1px solid #e0e7ff' }}>
         <Typography variant="caption" color="text.secondary">
           Create a free database at{' '}
-          <Link href="https://turso.tech" target="_blank" rel="noreferrer">turso.tech</Link>, then run:
-          {' '}<code>turso db create one</code>{' '}and{' '}
-          <code>turso db tokens create one</code>
-          <br />The database URL looks like: <code>libsql://one-yourname.turso.io</code>
+          <Link href="https://turso.tech" target="_blank" rel="noreferrer">turso.tech</Link>, then run:{' '}
+          <code>turso db create one</code> and <code>turso db tokens create one</code>
+          <br />The URL looks like: <code>libsql://one-yourname.turso.io</code>
         </Typography>
       </Alert>
 
       <TextField
-        label="Turso Database URL"
-        size="small"
-        fullWidth
-        value={form.databaseUrl}
-        onChange={set('databaseUrl')}
+        label="Turso Database URL" size="small" fullWidth
+        value={form.databaseUrl} onChange={set('databaseUrl')}
         placeholder="libsql://your-db-name.turso.io"
-        helperText={status?.configured ? '✓ Credentials are currently active (restart required to change)' : ''}
         sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
       />
-
       <TextField
-        label="Auth Token"
-        type={showToken ? 'text' : 'password'}
-        size="small"
-        fullWidth
-        value={form.authToken}
-        onChange={set('authToken')}
-        placeholder={status?.configured ? 'Paste new token to replace…' : 'Your Turso auth token'}
+        label="Auth Token" type={showToken ? 'text' : 'password'} size="small" fullWidth
+        value={form.authToken} onChange={set('authToken')}
+        placeholder="Your Turso auth token"
         InputProps={{
           endAdornment: (
             <InputAdornment position="end">
@@ -933,19 +901,18 @@ function TursoSection() {
       {error && <Alert severity="error" sx={{ borderRadius: 2 }}>{error}</Alert>}
       {saved && (
         <Alert severity="success" icon={<CheckCircle />} sx={{ borderRadius: 2 }}>
-          Credentials saved! <strong>Restart the app</strong> to activate Turso sync.
+          Credentials saved. <strong>Restart the app</strong> to activate.
         </Alert>
       )}
 
       <Box display="flex" justifyContent="flex-end">
         <Button
-          variant="contained"
-          onClick={save}
+          variant="contained" onClick={save}
           disabled={saving || !form.databaseUrl || !form.authToken}
           startIcon={saving ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <Save fontSize="small" />}
           sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, px: 3 }}
         >
-          {saving ? 'Saving…' : 'Save Sync Settings'}
+          {saving ? 'Saving…' : 'Save'}
         </Button>
       </Box>
     </Box>
