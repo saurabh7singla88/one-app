@@ -8,6 +8,9 @@ services:
         VITE_API_URL: /api
         # Enable the member insights panel — set in .env (default: false)
         ENABLE_MEMBER_INSIGHTS: ${ENABLE_MEMBER_INSIGHTS:-false}
+        # Author name shown in the UI footer — set in .env (default: Nebrix)
+        VITE_APP_AUTHOR: ${VITE_APP_AUTHOR:-Nebrix}
+
     ports:
       - "3000:47421"
     environment:

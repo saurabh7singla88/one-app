@@ -10,6 +10,8 @@ ENV VITE_API_URL=$VITE_API_URL
 # Member insights panel — disabled by default; set to 'true' to enable
 ARG ENABLE_MEMBER_INSIGHTS=false
 ENV ENABLE_MEMBER_INSIGHTS=$ENABLE_MEMBER_INSIGHTS
+ARG VITE_APP_AUTHOR=Nebrix
+ENV VITE_APP_AUTHOR=$VITE_APP_AUTHOR
 RUN npm run build
 
 # ─── Stage 2: Bundle backend (source stays in this stage only) ────────────────
