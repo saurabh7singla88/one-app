@@ -1,8 +1,7 @@
 # One
 
-An AI-powered initiative tracker and strategic management tool for engineering managers and VPs. Track projects, tasks, notes, and meeting outcomes across multiple workspaces — with optional AI analysis, Gmail integration, and JIRA/Confluence connectivity.
+An AI-powered initiative tracker and strategic management tool for anyone who needs to stay on top of projects, tasks, notes, and meeting outcomes across multiple workspaces — with optional AI analysis, Gmail integration, and JIRA/Confluence connectivity.
 
-Available as a **desktop app** (Electron, macOS/Windows) or a **web app** (Docker / Node.js + React).
 
 ---
 
@@ -110,29 +109,6 @@ environment:
 
 > **Minimum required**: `JWT_SECRET` + one of `TURSO_DATABASE_URL` / `DATABASE_URL`.
 
----
-
-### Build the image yourself
-
-```bash
-git clone https://github.com/yourusername/one-app.git
-cd the-manager
-docker build -t one-app:latest .
-```
-
----
-
-## Desktop App
-
-1. Download the `.dmg` (macOS) or `.exe` (Windows) from Releases
-2. Install and launch — creates a local SQLite database automatically
-3. Register on first launch; configure AI / Gmail / JIRA from **Setup** in the sidebar
-
-Database file location:
-- **macOS**: `~/Library/Application Support/one-desktop/app.db`
-- **Windows**: `%APPDATA%\one-desktop\app.db`
-
----
 
 ## Configuration (all via Setup page in the app)
 
