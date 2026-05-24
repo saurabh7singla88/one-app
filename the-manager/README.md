@@ -1,5 +1,7 @@
 # One
 
+> Built by **Saurabh Singla** · [@nebrix](https://github.com/saurabh7singla88)
+
 An AI-powered initiative tracker and strategic management tool for anyone who needs to stay on top of projects, tasks, notes, and meeting outcomes across multiple workspaces — with optional AI analysis, Gmail integration, and JIRA/Confluence connectivity.
 
 
