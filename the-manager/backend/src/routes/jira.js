@@ -613,4 +613,247 @@ router.get('/team', async (req, res, next) => {
   }
 });
 
+// ─── AI helper for member summary ─────────────────────────────────────────────
+async function generateMemberAISummary(memberName, issues, confluencePages) {
+  try {
+    const rows = await prisma.appSetting.findMany({ where: { key: { startsWith: 'ai_' } } });
+    const s = {
+      ai_provider: process.env.AI_PROVIDER || 'ollama',
+      ai_ollama_base_url: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
+      ai_ollama_model: process.env.OLLAMA_MODEL || 'llama3.1:latest',
+      ai_openai_base_url: 'https://api.openai.com', ai_openai_model: 'gpt-4o-mini',
+      ai_openai_api_key: '', ai_gemini_model: 'gemini-1.5-flash', ai_gemini_api_key: '',
+    };
+    rows.forEach(r => { s[r.key] = r.value; });
+    const provider = s.ai_provider;
+    if (provider === 'disabled') return null;
+
+    const issueLines = issues.slice(0, 40).map(i =>
+      `- [${i.key}] ${i.summary} (${i.type}, ${i.status}, ${i.priority || 'no priority'}, updated: ${i.updated}${i.components?.length ? ', components: ' + i.components.join(',') : ''})`
+    ).join('\n');
+    const confLines = confluencePages.slice(0, 15).map(p =>
+      `- "${p.title}" in space "${p.spaceName}" (modified: ${p.lastModified})`
+    ).join('\n');
+
+    const systemPrompt = `You are an engineering manager assistant. Analyze a team member's work data and return ONLY a valid JSON object with these exact keys:
+{
+  "focusAreas": ["string"],
+  "summary": "string",
+  "workloadLevel": "light|moderate|heavy|critical",
+  "highlights": ["string", "string", "string"]
+}
+focusAreas: 3-6 concise labels (e.g. "Bug Fixes", "API Development", "Documentation")
+summary: 2-3 sentences on what the person is focused on and their current workload
+workloadLevel: one of light/moderate/heavy/critical based on volume and priority of issues
+highlights: exactly 3 short actionable observations`;
+
+    const userPrompt = `Team member: ${memberName}
+JIRA issues in last 30 days (${issues.length} total):
+${issueLines || '(none)'}
+
+Confluence pages contributed to in last 30 days (${confluencePages.length} total):
+${confLines || '(none)'}
+
+Analyze the above and return the JSON summary.`;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 28_000);
+    let text = null;
+    try {
+      if (provider === 'ollama') {
+        const r = await fetch(`${s.ai_ollama_base_url}/api/chat`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
+          body: JSON.stringify({
+            model: s.ai_ollama_model, stream: false, format: 'json',
+            options: { temperature: 0.2, num_predict: 1024 },
+            messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+          }),
+        });
+        if (r.ok) { const d = await r.json(); text = d.message?.content || d.response; }
+      } else if (provider === 'openai' || provider === 'openai_compatible') {
+        const base = (s.ai_openai_base_url || 'https://api.openai.com').replace(/\/$/, '');
+        const r = await fetch(`${base}/v1/chat/completions`, {
+          method: 'POST', signal: controller.signal,
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${s.ai_openai_api_key}` },
+          body: JSON.stringify({
+            model: s.ai_openai_model, temperature: 0.2,
+            response_format: { type: 'json_object' },
+            messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+          }),
+        });
+        if (r.ok) { const d = await r.json(); text = d.choices?.[0]?.message?.content; }
+      } else if (provider === 'gemini') {
+        const model = s.ai_gemini_model || 'gemini-1.5-flash';
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${s.ai_gemini_api_key}`;
+        const r = await fetch(url, {
+          method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: systemPrompt }] },
+            contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+            generationConfig: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 1024 },
+          }),
+        });
+        if (r.ok) { const d = await r.json(); text = d.candidates?.[0]?.content?.parts?.[0]?.text; }
+      }
+    } finally { clearTimeout(timer); }
+
+    if (!text) return null;
+    try { return JSON.parse(text); } catch { return null; }
+  } catch (err) {
+    logger.error('generateMemberAISummary failed', err);
+    return null;
+  }
+}
+
+// ─── GET /api/jira/member-summary ─────────────────────────────────────────────
+// Fetches JIRA issues + Confluence pages for a member in the last 30 days,
+// builds a 30-day activity heatmap, and calls AI for a focus summary.
+// Query params: project (JIRA key), member (JIRA display name)
+router.get('/member-summary', async (req, res, next) => {
+  try {
+    const { project, member } = req.query;
+    if (!project?.trim() || !member?.trim()) {
+      return res.status(400).json({ error: 'project and member query params are required' });
+    }
+
+    const settings = await loadJiraSettings();
+    if (!settings['jira_base_url'] || !settings['jira_email'] || !settings['jira_api_token']) {
+      return res.status(400).json({ error: 'JIRA credentials not configured.' });
+    }
+
+    const baseUrl = validateAtlassianBaseUrl(settings['jira_base_url']);
+    const credentials = Buffer.from(`${settings['jira_email']}:${settings['jira_api_token']}`).toString('base64');
+    const headers = { 'Authorization': `Basic ${credentials}`, 'Accept': 'application/json' };
+    const atFetch = (url, opts = {}) => fetch(url, { ...opts, headers: { ...headers, ...opts.headers } });
+
+    // ── 1. Resolve display name → accountId ──────────────────────────────
+    const userRes = await atFetch(
+      `${baseUrl}/rest/api/3/user/search?query=${encodeURIComponent(member)}&maxResults=10`
+    );
+    if (!userRes.ok) return res.status(502).json({ error: 'Could not search JIRA users.' });
+    const users = await userRes.json();
+    const matched = (Array.isArray(users) ? users : []).find(u => u.displayName === member)
+      || (Array.isArray(users) && users.length > 0 ? users[0] : null);
+    if (!matched) return res.status(404).json({ error: `User "${member}" not found in JIRA.` });
+    const accountId = matched.accountId;
+
+    // ── 2. JIRA issues updated in last 30 days ────────────────────────────
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+    const sinceStr = since.toISOString().split('T')[0];
+
+    const jql = `project = "${project}" AND assignee = "${accountId}" AND updated >= "${sinceStr}" ORDER BY updated DESC`;
+    const jiraRes = await atFetch(
+      `${baseUrl}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&maxResults=100` +
+      `&fields=summary,status,priority,updated,issuetype,labels,components`
+    );
+    if (!jiraRes.ok) {
+      const errBody = await jiraRes.json().catch(() => ({}));
+      return res.status(502).json({ error: errBody?.errorMessages?.[0] || 'Could not fetch JIRA issues.' });
+    }
+    const jiraData = await jiraRes.json();
+    const issues = (jiraData.issues || []).map(i => ({
+      key:        i.key,
+      summary:    i.fields.summary,
+      status:     i.fields.status?.name,
+      statusCat:  i.fields.status?.statusCategory?.name,
+      priority:   i.fields.priority?.name,
+      type:       i.fields.issuetype?.name,
+      updated:    i.fields.updated?.split('T')[0],
+      labels:     i.fields.labels || [],
+      components: (i.fields.components || []).map(c => c.name),
+    }));
+
+    // ── 3. Confluence pages contributed in last 30 days ───────────────────
+    let confluencePages = [];
+    try {
+      const cql = `contributor = "${accountId}" AND lastModified >= "${sinceStr}" AND type = "page" ORDER BY lastModified DESC`;
+      const confRes = await atFetch(
+        `${baseUrl}/wiki/rest/api/search?cql=${encodeURIComponent(cql)}&limit=25`
+      );
+      if (confRes.ok) {
+        const confData = await confRes.json();
+        confluencePages = (confData.results || []).map(p => ({
+          id:           p.content?.id,
+          title:        p.content?.title || p.title || 'Untitled',
+          spaceName:    p.resultGlobalContainer?.title || '',
+          url:          p.content?._links?.webui
+                          ? `${baseUrl}/wiki${p.content._links.webui}`
+                          : (p.url || ''),
+          lastModified: p.lastModified?.split('T')[0],
+          excerpt:      (p.excerpt || '').replace(/<[^>]+>/g, '').slice(0, 200),
+        }));
+      }
+    } catch { /* Confluence may not be available — not fatal */ }
+
+    // ── 4. Build 30-day activity heatmap ──────────────────────────────────
+    const activityByDay = [];
+    const now = new Date();
+    for (let d = 29; d >= 0; d--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - d);
+      activityByDay.push({ date: date.toISOString().split('T')[0], jira: 0, confluence: 0, total: 0 });
+    }
+    const dayMap = Object.fromEntries(activityByDay.map(d => [d.date, d]));
+    issues.forEach(i => {
+      if (i.updated && dayMap[i.updated]) { dayMap[i.updated].jira += 1; dayMap[i.updated].total += 1; }
+    });
+    confluencePages.forEach(p => {
+      if (p.lastModified && dayMap[p.lastModified]) {
+        dayMap[p.lastModified].confluence += 1; dayMap[p.lastModified].total += 1;
+      }
+    });
+
+    // ── 5. AI summary (non-blocking — null if AI unavailable) ─────────────
+    const aiSummary = await generateMemberAISummary(member, issues, confluencePages);
+
+    res.json({ member, accountId, issues, confluencePages, activityByDay, aiSummary });
+  } catch (err) {
+    if (err.name === 'AbortError') return res.status(504).json({ error: 'Request timed out.' });
+    next(err);
+  }
+});
+
+// ─── Team Member Roles ────────────────────────────────────────────────────────
+// Returns { [name]: role } map for all tagged members in a project
+router.get('/team-roles', async (req, res, next) => {
+  try {
+    const { project } = req.query;
+    if (!project) return res.status(400).json({ error: 'project query param required' });
+    const rows = await prisma.teamMemberRole.findMany({ where: { project } });
+    const map = {};
+    rows.forEach(r => { map[r.name] = r.role; });
+    res.json(map);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/jira/team-roles
+// Body: { project, name, role }  — role must be DEV | QA | PM | OTHER or null/'' to remove
+router.put('/team-roles', async (req, res, next) => {
+  try {
+    const { project, name, role } = req.body;
+    if (!project || !name) return res.status(400).json({ error: 'project and name required' });
+
+    // Empty / null role means "remove tag"
+    if (!role) {
+      await prisma.teamMemberRole.deleteMany({ where: { project, name } });
+      return res.json({ ok: true, removed: true });
+    }
+
+    const allowed = ['DEV', 'QA', 'PM', 'OTHER'];
+    if (!allowed.includes(role)) return res.status(400).json({ error: `role must be one of ${allowed.join(', ')}` });
+
+    const row = await prisma.teamMemberRole.upsert({
+      where:  { project_name: { project, name } },
+      update: { role },
+      create: { project, name, role },
+    });
+    res.json(row);
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

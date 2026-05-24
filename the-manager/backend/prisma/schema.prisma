@@ -243,6 +243,20 @@ model AppSetting {
   @@map("app_settings")
 }
 
+model TeamMemberRole {
+  id        String   @id @default(uuid())
+  project   String   // JIRA project key (e.g. "PROJ")
+  name      String   // JIRA display name — exact match
+  role      String   // DEV | QA | PM | OTHER
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([project, name])
+  @@index([project])
+  @@map("team_member_roles")
+}
+
 model IntegrationItem {
   id           String   @id @default(uuid())
   type         String   // JIRA | CONFLUENCE

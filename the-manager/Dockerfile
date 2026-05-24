@@ -7,6 +7,9 @@ COPY frontend/ ./
 # VITE_API_URL can be overridden at build time; default assumes same-origin nginx proxy
 ARG VITE_API_URL=/api
 ENV VITE_API_URL=$VITE_API_URL
+# Member insights panel — disabled by default; set to 'true' to enable
+ARG ENABLE_MEMBER_INSIGHTS=false
+ENV ENABLE_MEMBER_INSIGHTS=$ENABLE_MEMBER_INSIGHTS
 RUN npm run build
 
 # ─── Stage 2: Bundle backend (source stays in this stage only) ────────────────

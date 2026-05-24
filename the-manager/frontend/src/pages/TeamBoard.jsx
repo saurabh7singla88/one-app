@@ -3,7 +3,7 @@ import {
   Box, Typography, TextField, Button, Paper, Avatar, Chip,
   CircularProgress, Alert, Collapse, IconButton, Tooltip,
   LinearProgress, Divider, Link, Select, MenuItem, FormControl,
-  InputLabel, Card, CardContent, Stack,
+  InputLabel, Card, CardContent, Stack, Drawer, Skeleton,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   ToggleButtonGroup, ToggleButton,
 } from '@mui/material';
@@ -11,9 +11,22 @@ import {
   Groups, ExpandMore, ExpandLess, OpenInNew, Refresh,
   BugReport, Task as TaskIcon, BookmarkBorder, ArrowUpward,
   ArrowDownward, Remove, Circle, Close,
-  TableRows, ViewAgenda, FilterList,
+  TableRows, ViewAgenda, FilterList, InsightsOutlined,
+  Article as ArticleIcon,
 } from '@mui/icons-material';
 import api from '../api/axios';
+
+// ─── Role config ─────────────────────────────────────────────────────────────
+const ROLE_CONFIG = {
+  DEV:   { label: 'Dev',   color: '#3b82f6', bg: '#eff6ff' },
+  QA:    { label: 'QA',    color: '#7c3aed', bg: '#f5f3ff' },
+  PM:    { label: 'PM',    color: '#0891b2', bg: '#f0f9ff' },
+  OTHER: { label: 'Other', color: '#64748b', bg: '#f8fafc' },
+};
+const ROLE_ORDER = ['DEV', 'QA', 'PM', 'OTHER'];
+
+// ─── Feature flags ───────────────────────────────────────────────────────────
+const INSIGHTS_ENABLED = import.meta.env.ENABLE_MEMBER_INSIGHTS === 'true';
 
 // ─── Priority color mapping ──────────────────────────────────────────────────
 const PRIORITY_CONFIG = {
@@ -108,8 +121,9 @@ function IssueRow({ issue }) {
 }
 
 // ─── Team Member Card ────────────────────────────────────────────────────────
-function MemberCard({ member }) {
+function MemberCard({ member, role, onRoleChange, onSummaryClick }) {
   const [expanded, setExpanded] = useState(true);
+  const roleCfg = role ? ROLE_CONFIG[role] : null;
 
   const currentIssues = member.issues.filter(i => i.myRole === 'current');
   const pastIssues    = member.issues.filter(i => i.myRole === 'past');
@@ -151,6 +165,35 @@ function MemberCard({ member }) {
             </Stack>
           </Box>
 
+          {/* Role select */}
+          {onRoleChange && member.name !== 'Unassigned' && (
+            <FormControl size="small" variant="outlined" sx={{ minWidth: 82, flexShrink: 0 }}>
+              <Select
+                value={role || ''}
+                onChange={e => onRoleChange(member.name, e.target.value || null)}
+                displayEmpty
+                sx={{
+                  fontSize: 11, height: 26,
+                  '& .MuiSelect-select': { py: 0.3, px: 1 },
+                  ...(roleCfg ? { bgcolor: roleCfg.bg, color: roleCfg.color, '& fieldset': { borderColor: `${roleCfg.color}60` } } : {}),
+                }}
+                renderValue={v => v
+                  ? <Typography variant="caption" fontWeight={600} sx={{ color: roleCfg?.color }}>{roleCfg?.label}</Typography>
+                  : <Typography variant="caption" color="text.disabled">Tag role</Typography>
+                }
+              >
+                {role && <MenuItem value=""><Typography variant="caption" color="text.secondary">— Remove tag —</Typography></MenuItem>}
+                {ROLE_ORDER.map(r => (
+                  <MenuItem key={r} value={r}>
+                    <Chip label={ROLE_CONFIG[r].label} size="small"
+                      sx={{ fontSize: 11, height: 20, bgcolor: ROLE_CONFIG[r].bg, color: ROLE_CONFIG[r].color,
+                            border: `1px solid ${ROLE_CONFIG[r].color}40`, pointerEvents: 'none' }} />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+
           {/* Quick stats */}
           <Stack direction="row" spacing={0.75} sx={{ mr: 1 }}>
             {todo > 0 && (
@@ -167,6 +210,18 @@ function MemberCard({ member }) {
           <IconButton size="small" onClick={() => setExpanded(!expanded)}>
             {expanded ? <ExpandLess /> : <ExpandMore />}
           </IconButton>
+
+          {/* Insights icon — rightmost, visually separated */}
+          {onSummaryClick && member.name !== 'Unassigned' && (
+            <Box sx={{ borderLeft: '1px solid #e2e8f0', pl: 0.75, ml: 0.25, display: 'flex', alignItems: 'center' }}>
+              <Tooltip title="Member Insights" arrow>
+                <IconButton size="small" onClick={() => onSummaryClick(member.name, member.avatar)}
+                  sx={{ color: '#6366f1', '&:hover': { bgcolor: '#ede9fe' } }}>
+                  <InsightsOutlined sx={{ fontSize: 17 }} />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          )}
         </Box>
 
         {/* Progress Bar — based on current assignments only */}
@@ -203,6 +258,313 @@ function MemberCard({ member }) {
   );
 }
 
+// ─── Role Section ─────────────────────────────────────────────────────────────
+const ROLE_SECTION_META = {
+  DEV:      { label: 'Developers',       icon: '🛠' },
+  QA:       { label: 'QA Engineers',     icon: '🧪' },
+  PM:       { label: 'Product Managers', icon: '📋' },
+  OTHER:    { label: 'Other',            icon: '👤' },
+  UNTAGGED: { label: 'Untagged',         icon: '◻' },
+};
+
+function RoleSection({ roleKey, members, memberRoles, onRoleChange, onSummaryClick }) {
+  const [open, setOpen] = useState(true);
+  if (members.length === 0) return null;
+  const cfg = roleKey === 'UNTAGGED' ? { label: 'Untagged', color: '#94a3b8', bg: '#f8fafc' } : ROLE_CONFIG[roleKey];
+  const meta = ROLE_SECTION_META[roleKey] || { label: roleKey, icon: '•' };
+  const totalTickets = members.reduce((s, m) => s + m.issueCount, 0);
+  const totalSP = members.reduce((s, m) => s + m.totalStoryPoints, 0);
+
+  return (
+    <Box sx={{ mb: 1 }}>
+      <Box
+        onClick={() => setOpen(o => !o)}
+        sx={{
+          display: 'flex', alignItems: 'center', gap: 1, mb: 1.5,
+          cursor: 'pointer', userSelect: 'none',
+          px: 1.5, py: 0.75, borderRadius: 2,
+          bgcolor: `${cfg.color}0d`,
+          border: `1px solid ${cfg.color}30`,
+          '&:hover': { bgcolor: `${cfg.color}18` },
+        }}
+      >
+        <Typography sx={{ fontSize: 15 }}>{meta.icon}</Typography>
+        <Typography variant="subtitle2" fontWeight={700} sx={{ color: cfg.color, flex: 1 }}>
+          {meta.label}
+        </Typography>
+        <Chip label={`${members.length}`} size="small"
+          sx={{ fontSize: 11, height: 20, fontWeight: 700, bgcolor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}40` }} />
+        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+          {totalTickets} tickets{totalSP > 0 ? ` · ${totalSP} SP` : ''}
+        </Typography>
+        {open ? <ExpandLess sx={{ fontSize: 18, color: cfg.color }} /> : <ExpandMore sx={{ fontSize: 18, color: cfg.color }} />}
+      </Box>
+      <Collapse in={open}>
+        {members.map(m => (
+          <MemberCard key={m.name} member={m} role={memberRoles[m.name]} onRoleChange={onRoleChange} onSummaryClick={onSummaryClick} />
+        ))}
+      </Collapse>
+    </Box>
+  );
+}
+
+// ─── Member Summary Drawer ────────────────────────────────────────────────────
+const WORKLOAD_STYLE = {
+  light:    { bg: '#dcfce7', color: '#166534' },
+  moderate: { bg: '#fef9c3', color: '#854d0e' },
+  heavy:    { bg: '#fed7aa', color: '#9a3412' },
+  critical: { bg: '#fee2e2', color: '#991b1b' },
+};
+
+function HeatCell({ day, maxVal }) {
+  const pct = maxVal > 0 ? day.total / maxVal : 0;
+  const bg = pct === 0 ? '#f1f5f9'
+    : pct <= 0.33 ? '#c7d2fe'
+    : pct <= 0.66 ? '#818cf8'
+    : '#4338ca';
+  const label = day.date.slice(5); // MM-DD
+  const tooltip = `${day.date}: ${day.jira} JIRA${day.confluence ? `, ${day.confluence} Confluence` : ''}`;
+  return (
+    <Tooltip title={tooltip} arrow placement="top">
+      <Box sx={{
+        width: 24, height: 24, borderRadius: 1, bgcolor: bg,
+        border: '1px solid rgba(0,0,0,0.07)', cursor: 'default', position: 'relative',
+        transition: 'transform 0.1s', '&:hover': { transform: 'scale(1.4)', zIndex: 1 },
+        // Tiny teal dot on bottom-right if there's confluence activity
+        '&::after': day.confluence > 0 ? {
+          content: '""', position: 'absolute', bottom: 2, right: 2,
+          width: 5, height: 5, borderRadius: '50%', bgcolor: '#0d9488',
+        } : {},
+      }} />
+    </Tooltip>
+  );
+}
+
+function MemberSummaryDrawer({ open, memberName, memberAvatar, project, onClose }) {
+  const [loading, setLoading] = useState(false);
+  const [data, setData]       = useState(null);
+  const [error, setError]     = useState('');
+
+  useEffect(() => {
+    if (!open || !memberName || !project) return;
+    setLoading(true); setData(null); setError('');
+    api.get('/jira/member-summary', { params: { project, member: memberName }, timeout: 65000 })
+      .then(r => setData(r.data))
+      .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load summary'))
+      .finally(() => setLoading(false));
+  }, [open, memberName, project]);
+
+  const activityMax = useMemo(
+    () => data ? Math.max(...data.activityByDay.map(d => d.total), 1) : 1,
+    [data]
+  );
+
+  // Day-of-week labels aligned with the first day
+  const weekLabels = data
+    ? (() => {
+        const first = new Date(data.activityByDay[0]?.date);
+        const days = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+        return Array.from({ length: 7 }, (_, i) => days[(first.getDay() + i) % 7]);
+      })()
+    : [];
+
+  const wl = data?.aiSummary?.workloadLevel;
+  const wlStyle = WORKLOAD_STYLE[wl] || null;
+
+  return (
+    <Drawer
+      anchor="right"
+      open={open}
+      onClose={onClose}
+      PaperProps={{ sx: { width: { xs: '100vw', sm: 500 }, display: 'flex', flexDirection: 'column' } }}
+    >
+      {/* ── Header ── */}
+      <Box sx={{ flexShrink: 0, borderBottom: '1px solid #e2e8f0' }}>
+        <Box sx={{ px: 2.5, pt: 2, pb: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <InsightsOutlined sx={{ fontSize: 20, color: '#6366f1' }} />
+          <Typography variant="h6" fontWeight={700} sx={{ flex: 1, color: '#1e293b' }}>
+            Member Insights
+          </Typography>
+          <IconButton onClick={onClose} size="small"><Close /></IconButton>
+        </Box>
+        <Box sx={{ px: 2.5, pb: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Avatar src={memberAvatar} sx={{ width: 38, height: 38, bgcolor: '#5c6bc0' }}>{memberName?.[0]}</Avatar>
+          <Box>
+            <Typography variant="subtitle1" fontWeight={700}>{memberName}</Typography>
+            <Typography variant="caption" color="text.secondary">{project} · Last 30 days</Typography>
+          </Box>
+        </Box>
+      </Box>
+
+      {/* ── Body ── */}
+      <Box sx={{ flex: 1, overflow: 'auto', p: 2.5 }}>
+
+        {loading && (
+          <Box>
+            <Skeleton variant="text" width="60%" sx={{ mb: 0.5 }} />
+            <Skeleton variant="rounded" height={70} sx={{ mb: 3 }} />
+            <Skeleton variant="text" width="40%" sx={{ mb: 0.5 }} />
+            <Skeleton variant="rounded" height={110} sx={{ mb: 3 }} />
+            <Skeleton variant="text" width="50%" sx={{ mb: 0.5 }} />
+            <Skeleton variant="rounded" height={180} />
+          </Box>
+        )}
+
+        {!loading && error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+        {!loading && data && (
+          <>
+            {/* ── 30-Day Activity Heatmap ── */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.25 }}>
+                📊 30-Day Activity
+              </Typography>
+              {/* Week-day header */}
+              <Box sx={{ display: 'flex', gap: 0.5, mb: 0.5 }}>
+                {weekLabels.map((d, i) => (
+                  <Typography key={i} variant="caption" color="text.disabled"
+                    sx={{ width: 24, textAlign: 'center', fontSize: 9, flexShrink: 0 }}>
+                    {d}
+                  </Typography>
+                ))}
+              </Box>
+              {/* Grid: 7 columns, rows of up to 7 days */}
+              {Array.from({ length: Math.ceil(data.activityByDay.length / 7) }).map((_, row) => (
+                <Box key={row} sx={{ display: 'flex', gap: 0.5, mb: 0.5 }}>
+                  {data.activityByDay.slice(row * 7, row * 7 + 7).map(day => (
+                    <HeatCell key={day.date} day={day} maxVal={activityMax} />
+                  ))}
+                </Box>
+              ))}
+              {/* Legend */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                <Typography variant="caption" color="text.disabled" sx={{ fontSize: 10 }}>Less</Typography>
+                {['#f1f5f9', '#c7d2fe', '#818cf8', '#4338ca'].map(c => (
+                  <Box key={c} sx={{ width: 11, height: 11, borderRadius: 0.5, bgcolor: c, border: '1px solid rgba(0,0,0,0.1)' }} />
+                ))}
+                <Typography variant="caption" color="text.disabled" sx={{ fontSize: 10 }}>More</Typography>
+                <Box sx={{ width: 1, height: 14, bgcolor: '#e2e8f0', mx: 0.5 }} />
+                <Box sx={{ width: 9, height: 9, borderRadius: '50%', bgcolor: '#0d9488' }} />
+                <Typography variant="caption" color="text.disabled" sx={{ fontSize: 10 }}>Confluence</Typography>
+              </Box>
+            </Box>
+
+            {/* ── AI Focus Summary ── */}
+            {data.aiSummary ? (
+              <Box sx={{ mb: 3, p: 2, borderRadius: 2.5, border: '1px solid #ede9fe', bgcolor: '#faf5ff' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                  <Typography variant="subtitle2" fontWeight={700}>🎯 Focus Summary</Typography>
+                  {wlStyle && (
+                    <Chip label={wl} size="small"
+                      sx={{ fontSize: 10, height: 20, fontWeight: 700, bgcolor: wlStyle.bg, color: wlStyle.color }} />
+                  )}
+                </Box>
+                {/* Focus area chips */}
+                <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 1.5 }}>
+                  {(data.aiSummary.focusAreas || []).map((area, i) => (
+                    <Chip key={i} label={area} size="small"
+                      sx={{ fontSize: 11, height: 22, bgcolor: '#ede9fe', color: '#5b21b6' }} />
+                  ))}
+                </Box>
+                {/* Narrative */}
+                <Typography variant="body2" sx={{ color: '#374151', lineHeight: 1.65, mb: 1.5 }}>
+                  {data.aiSummary.summary}
+                </Typography>
+                {/* Highlights */}
+                {(data.aiSummary.highlights || []).length > 0 && (
+                  <Box sx={{ borderTop: '1px solid #ede9fe', pt: 1.25 }}>
+                    {data.aiSummary.highlights.map((h, i) => (
+                      <Box key={i} sx={{ display: 'flex', gap: 1, mb: 0.5 }}>
+                        <Typography variant="caption" sx={{ color: '#7c3aed', fontWeight: 700 }}>•</Typography>
+                        <Typography variant="caption" sx={{ color: '#4b5563', lineHeight: 1.5 }}>{h}</Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            ) : (
+              <Alert severity="info" sx={{ mb: 3, fontSize: 12 }}>
+                AI summary unavailable — check AI settings in Setup.
+              </Alert>
+            )}
+
+            {/* ── JIRA Tickets ── */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.25 }}>
+                📋 JIRA Tickets ({data.issues.length})
+              </Typography>
+              {data.issues.length === 0 ? (
+                <Typography variant="body2" color="text.disabled">No tickets updated in last 30 days</Typography>
+              ) : (
+                data.issues.slice(0, 20).map(issue => (
+                  <Box key={issue.key}
+                    sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.75, borderBottom: '1px solid #f1f5f9' }}>
+                    <Chip label={issue.key} size="small"
+                      sx={{ fontFamily: 'monospace', fontSize: 10, height: 20, bgcolor: '#eff6ff', color: '#1d4ed8', flexShrink: 0 }} />
+                    <Typography variant="caption"
+                      sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {issue.summary}
+                    </Typography>
+                    <Chip label={issue.status} size="small" sx={{
+                      fontSize: 10, height: 18, flexShrink: 0,
+                      bgcolor: issue.statusCat === 'Done' ? '#dcfce7' : issue.statusCat === 'In Progress' ? '#dbeafe' : '#f1f5f9',
+                      color:   issue.statusCat === 'Done' ? '#166534' : issue.statusCat === 'In Progress' ? '#1e40af' : '#64748b',
+                    }} />
+                  </Box>
+                ))
+              )}
+              {data.issues.length > 20 && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                  + {data.issues.length - 20} more tickets
+                </Typography>
+              )}
+            </Box>
+
+            {/* ── Confluence Pages ── */}
+            <Box>
+              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.25 }}>
+                📄 Confluence Pages ({data.confluencePages.length})
+              </Typography>
+              {data.confluencePages.length === 0 ? (
+                <Typography variant="body2" color="text.disabled">No Confluence activity in last 30 days</Typography>
+              ) : (
+                data.confluencePages.slice(0, 15).map((page, i) => (
+                  <Box key={page.id || i} sx={{ py: 0.75, borderBottom: '1px solid #f1f5f9' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <ArticleIcon sx={{ fontSize: 14, color: '#0d9488', flexShrink: 0 }} />
+                      {page.url ? (
+                        <Link href={page.url} target="_blank" rel="noopener noreferrer" variant="caption"
+                          sx={{ fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {page.title}
+                        </Link>
+                      ) : (
+                        <Typography variant="caption" fontWeight={500}
+                          sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {page.title}
+                        </Typography>
+                      )}
+                      {page.url && <OpenInNew sx={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }} />}
+                    </Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ pl: 2.5 }}>
+                      {page.spaceName}{page.spaceName && page.lastModified ? ' · ' : ''}{page.lastModified}
+                    </Typography>
+                    {page.excerpt && (
+                      <Typography variant="caption" color="text.disabled"
+                        sx={{ display: 'block', pl: 2.5, mt: 0.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {page.excerpt}
+                      </Typography>
+                    )}
+                  </Box>
+                ))
+              )}
+            </Box>
+          </>
+        )}
+      </Box>
+    </Drawer>
+  );
+}
+
 const RECENT_KEY = 'one_jira_recent_projects';
 const MAX_RECENT = 8;
 
@@ -234,6 +596,35 @@ export default function TeamBoard() {
   const [sprintsError, setSprintsError] = useState('');
   const [view, setView] = useState('table'); // 'table' | 'cards'
 
+  // ── Team member roles (persisted in DB) ───────────────────────────────────
+  const [memberRoles, setMemberRoles] = useState({}); // { [jiraName]: 'DEV'|'QA'|'PM'|'OTHER' }
+
+  // Load roles whenever the project changes
+  useEffect(() => {
+    if (!project.trim()) return;
+    api.get('/jira/team-roles', { params: { project } })
+      .then(r => setMemberRoles(r.data))
+      .catch(() => {});
+  }, [project]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRoleChange = useCallback(async (name, role) => {
+    const prev = memberRoles;
+    const next = { ...memberRoles };
+    if (role) next[name] = role; else delete next[name];
+    setMemberRoles(next); // optimistic update
+    try {
+      await api.put('/jira/team-roles', { project, name, role: role || '' });
+    } catch {
+      setMemberRoles(prev); // revert on error
+    }
+  }, [memberRoles, project]);
+
+  // ── Member summary drawer ─────────────────────────────────────────────────
+  const [summaryTarget, setSummaryTarget] = useState(null); // { name, avatar } | null
+  const handleSummaryClick = useCallback((name, avatar) => {
+    setSummaryTarget({ name, avatar });
+  }, []);
+
   // ── Filters ──────────────────────────────────────────────────────────────
   const [filterAssignees,  setFilterAssignees]  = useState([]);
   const [filterStatuses,   setFilterStatuses]   = useState([]);
@@ -241,14 +632,16 @@ export default function TeamBoard() {
   const [filterIssueTypes, setFilterIssueTypes] = useState([]);
   const [filterRole,       setFilterRole]       = useState('all'); // 'all' | 'current' | 'past'
   const [filterMinSP,      setFilterMinSP]      = useState('');
+  const [filterTeamRole,   setFilterTeamRole]   = useState('all'); // 'all' | DEV | QA | PM | OTHER | UNTAGGED
 
   const hasActiveFilters = filterAssignees.length > 0 || filterStatuses.length > 0 ||
     filterPriorities.length > 0 || filterIssueTypes.length > 0 ||
-    filterRole !== 'all' || filterMinSP !== '';
+    filterRole !== 'all' || filterMinSP !== '' || filterTeamRole !== 'all';
 
   const clearFilters = () => {
     setFilterAssignees([]); setFilterStatuses([]); setFilterPriorities([]);
     setFilterIssueTypes([]); setFilterRole('all'); setFilterMinSP('');
+    setFilterTeamRole('all');
   };
 
   // Reset filters whenever a new fetch completes
@@ -272,6 +665,12 @@ export default function TeamBoard() {
     const minSP = parseFloat(filterMinSP);
     return data.team
       .filter(m => filterAssignees.length === 0 || filterAssignees.includes(m.name))
+      .filter(m => {
+        if (filterTeamRole === 'all') return true;
+        const role = memberRoles[m.name];
+        if (filterTeamRole === 'UNTAGGED') return !role;
+        return role === filterTeamRole;
+      })
       .map(m => {
         const issues = m.issues.filter(issue => {
           if (filterStatuses.length > 0   && !filterStatuses.includes(issue.statusCategory)) return false;
@@ -288,7 +687,18 @@ export default function TeamBoard() {
         return { ...m, issues, issueCount: issues.length, totalStoryPoints };
       })
       .filter(m => m.issues.length > 0);
-  }, [data, filterAssignees, filterStatuses, filterPriorities, filterIssueTypes, filterRole, filterMinSP]);
+  }, [data, filterAssignees, filterStatuses, filterPriorities, filterIssueTypes, filterRole, filterMinSP, filterTeamRole, memberRoles]);
+
+  // Group filtered team by role for cards view
+  const memberGroups = useMemo(() => {
+    const groups = { DEV: [], QA: [], PM: [], OTHER: [], UNTAGGED: [] };
+    filteredTeam.forEach(m => {
+      const role = memberRoles[m.name];
+      if (role && groups[role]) groups[role].push(m);
+      else groups.UNTAGGED.push(m);
+    });
+    return groups;
+  }, [filteredTeam, memberRoles]);
 
   // Check JIRA config on mount
   useEffect(() => {
@@ -341,6 +751,13 @@ export default function TeamBoard() {
     if (project.trim() && jiraConfigured) fetchTeam();
   }, [jiraConfigured]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Auto-load sprints when project key changes (debounced)
+  useEffect(() => {
+    if (!project.trim() || !jiraConfigured) return;
+    const t = setTimeout(() => loadSprints(project), 600);
+    return () => clearTimeout(t);
+  }, [project, jiraConfigured]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (jiraConfigured === null) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', pt: 10 }}>
@@ -375,17 +792,8 @@ export default function TeamBoard() {
             onChange={e => { setProject(e.target.value.toUpperCase()); setSprints([]); }}
             sx={{ width: 160 }}
             disabled={!jiraConfigured}
+            InputProps={sprintsLoading ? { endAdornment: <CircularProgress size={14} sx={{ mr: 0.5 }} /> } : {}}
           />
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={() => loadSprints()}
-            disabled={!project.trim() || sprintsLoading || !jiraConfigured}
-            startIcon={sprintsLoading ? <CircularProgress size={14} color="inherit" /> : null}
-            sx={{ textTransform: 'none', borderRadius: 2, height: 40, whiteSpace: 'nowrap' }}
-          >
-            {sprintsLoading ? 'Loading…' : 'Load Sprints'}
-          </Button>
           <FormControl size="small" sx={{ width: 220 }}>
             <InputLabel>Sprint</InputLabel>
             <Select value={sprint} label="Sprint" onChange={e => setSprint(e.target.value)} disabled={!jiraConfigured}>
@@ -593,13 +1001,28 @@ export default function TeamBoard() {
               inputProps={{ min: 0, step: 1 }}
             />
 
-            {/* Role */}
+            {/* Role (current/past) */}
             <FormControl size="small" sx={{ minWidth: 120 }}>
               <InputLabel>Role</InputLabel>
               <Select value={filterRole} label="Role" onChange={e => setFilterRole(e.target.value)}>
                 <MenuItem value="all">All</MenuItem>
                 <MenuItem value="current">Assigned</MenuItem>
                 <MenuItem value="past">Past only</MenuItem>
+              </Select>
+            </FormControl>
+
+            {/* Team Role */}
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <InputLabel>Team Role</InputLabel>
+              <Select value={filterTeamRole} label="Team Role" onChange={e => setFilterTeamRole(e.target.value)}>
+                <MenuItem value="all">All</MenuItem>
+                {ROLE_ORDER.map(r => (
+                  <MenuItem key={r} value={r}>
+                    <Chip label={ROLE_CONFIG[r].label} size="small"
+                      sx={{ fontSize: 11, height: 20, bgcolor: ROLE_CONFIG[r].bg, color: ROLE_CONFIG[r].color, pointerEvents: 'none' }} />
+                  </MenuItem>
+                ))}
+                <MenuItem value="UNTAGGED"><Typography variant="body2" color="text.secondary">Untagged</Typography></MenuItem>
               </Select>
             </FormControl>
 
@@ -636,6 +1059,18 @@ export default function TeamBoard() {
                 <Chip label={filterRole === 'current' ? 'Assigned only' : 'Past only'} size="small"
                   onDelete={() => setFilterRole('all')} sx={{ fontSize: 11, height: 22, bgcolor: '#f3e5f5', color: '#7b1fa2' }} />
               )}
+              {filterTeamRole !== 'all' && (
+                <Chip
+                  label={filterTeamRole === 'UNTAGGED' ? 'Untagged' : ROLE_CONFIG[filterTeamRole]?.label}
+                  size="small"
+                  onDelete={() => setFilterTeamRole('all')}
+                  sx={{
+                    fontSize: 11, height: 22,
+                    bgcolor: filterTeamRole === 'UNTAGGED' ? '#f8fafc' : ROLE_CONFIG[filterTeamRole]?.bg,
+                    color:   filterTeamRole === 'UNTAGGED' ? '#64748b' : ROLE_CONFIG[filterTeamRole]?.color,
+                  }}
+                />
+              )}
               {filterMinSP && (
                 <Chip label={`≥ ${filterMinSP} SP`} size="small" onDelete={() => setFilterMinSP('')}
                   sx={{ fontSize: 11, height: 22, bgcolor: '#e8f5e918', color: '#2e7d32' }} />
@@ -647,19 +1082,41 @@ export default function TeamBoard() {
 
       {/* Allocation Table */}
       {data && !loading && view === 'table' && (
-        <AllocationTable team={filteredTeam} />
+        <AllocationTable team={filteredTeam} memberRoles={memberRoles} onRoleChange={handleRoleChange} onSummaryClick={INSIGHTS_ENABLED ? handleSummaryClick : undefined} />
       )}
 
-      {/* Team Member Cards */}
-      {data && !loading && view === 'cards' && filteredTeam.map(member => (
-        <MemberCard key={member.name} member={member} />
-      ))}
+      {/* Team Member Cards — grouped by role */}
+      {data && !loading && view === 'cards' && (
+        <Box>
+          {[...ROLE_ORDER, 'UNTAGGED'].map(roleKey => (
+            <RoleSection
+              key={roleKey}
+              roleKey={roleKey}
+              members={memberGroups[roleKey] || []}
+              memberRoles={memberRoles}
+              onRoleChange={handleRoleChange}
+              onSummaryClick={INSIGHTS_ENABLED ? handleSummaryClick : undefined}
+            />
+          ))}
+        </Box>
+      )}
 
       {/* Empty state */}
       {data && !loading && filteredTeam.length === 0 && (
         <Paper elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: 3, p: 5, textAlign: 'center' }}>
           <Typography color="text.secondary">No issues found for this project/sprint.</Typography>
         </Paper>
+      )}
+
+      {/* Member Summary Drawer */}
+      {INSIGHTS_ENABLED && (
+        <MemberSummaryDrawer
+          open={!!summaryTarget}
+          memberName={summaryTarget?.name}
+          memberAvatar={summaryTarget?.avatar}
+          project={project}
+          onClose={() => setSummaryTarget(null)}
+        />
       )}
     </Box>
   );
@@ -668,7 +1125,7 @@ export default function TeamBoard() {
 // ─── Allocation Table ─────────────────────────────────────────────────────────
 const PRIORITY_ORDER = { Highest: 0, High: 1, Medium: 2, Low: 3, Lowest: 4 };
 
-function AllocationTable({ team }) {
+function AllocationTable({ team, memberRoles = {}, onRoleChange, onSummaryClick }) {
   const rows = team.map(member => {
     const current = member.issues.filter(i => i.myRole === 'current');
     const past    = member.issues.filter(i => i.myRole === 'past');
@@ -706,8 +1163,7 @@ function AllocationTable({ team }) {
       <Table size="small">
         <TableHead>
           <TableRow sx={{ bgcolor: '#f8fafc' }}>
-            <TableCell sx={{ fontWeight: 700, py: 1.5 }}>Team Member</TableCell>
-            <TableCell align="center" sx={{ fontWeight: 700 }}>Assigned</TableCell>
+            <TableCell sx={{ fontWeight: 700, py: 1.5 }}>Team Member</TableCell>              <TableCell sx={{ fontWeight: 700 }}>Role</TableCell>            <TableCell align="center" sx={{ fontWeight: 700 }}>Assigned</TableCell>
             <TableCell align="center" sx={{ fontWeight: 700 }}>Previously</TableCell>
             <TableCell align="center" sx={{ fontWeight: 700 }}>Story Pts</TableCell>
             <TableCell sx={{ fontWeight: 700 }}>Priority Breakdown</TableCell>
@@ -723,7 +1179,48 @@ function AllocationTable({ team }) {
                     {row.name[0]}
                   </Avatar>
                   <Typography variant="body2" fontWeight={500}>{row.name}</Typography>
+                  {onSummaryClick && row.name !== 'Unassigned' && (
+                    <Tooltip title="Member Insights" arrow>
+                      <IconButton size="small" onClick={() => onSummaryClick(row.name, row.avatar)}
+                        sx={{ p: 0.25, color: '#6366f1', '&:hover': { bgcolor: '#ede9fe' }, ml: 'auto' }}>
+                        <InsightsOutlined sx={{ fontSize: 15 }} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                 </Box>
+              </TableCell>
+              <TableCell>
+                {row.name !== 'Unassigned' && onRoleChange ? (
+                  <FormControl size="small" variant="outlined" sx={{ minWidth: 82 }}>
+                    <Select
+                      value={memberRoles[row.name] || ''}
+                      onChange={e => onRoleChange(row.name, e.target.value || null)}
+                      displayEmpty
+                      sx={{
+                        fontSize: 11, height: 24,
+                        '& .MuiSelect-select': { py: 0.3, px: 1 },
+                        ...(memberRoles[row.name] ? {
+                          bgcolor: ROLE_CONFIG[memberRoles[row.name]]?.bg,
+                          color:   ROLE_CONFIG[memberRoles[row.name]]?.color,
+                          '& fieldset': { borderColor: `${ROLE_CONFIG[memberRoles[row.name]]?.color}60` },
+                        } : {}),
+                      }}
+                      renderValue={v => v
+                        ? <Typography variant="caption" fontWeight={600} sx={{ color: ROLE_CONFIG[v]?.color }}>{ROLE_CONFIG[v]?.label}</Typography>
+                        : <Typography variant="caption" color="text.disabled">Tag</Typography>
+                      }
+                    >
+                      {memberRoles[row.name] && <MenuItem value=""><Typography variant="caption" color="text.secondary">— Remove —</Typography></MenuItem>}
+                      {ROLE_ORDER.map(r => (
+                        <MenuItem key={r} value={r}>
+                          <Chip label={ROLE_CONFIG[r].label} size="small"
+                            sx={{ fontSize: 11, height: 20, bgcolor: ROLE_CONFIG[r].bg, color: ROLE_CONFIG[r].color,
+                                  border: `1px solid ${ROLE_CONFIG[r].color}40`, pointerEvents: 'none' }} />
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                ) : <Typography variant="caption" color="text.disabled">—</Typography>}
               </TableCell>
               <TableCell align="center">
                 <Typography variant="body2" fontWeight={700} color={row.current > 0 ? '#1976d2' : 'text.secondary'}>

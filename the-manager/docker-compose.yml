@@ -3,9 +3,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
+      args: 
         # The frontend will call /api/* — nginx (or express static) proxies these
         VITE_API_URL: /api
+        # Enable the member insights panel — set in .env (default: false)
+        ENABLE_MEMBER_INSIGHTS: ${ENABLE_MEMBER_INSIGHTS:-false}
     ports:
       - "3000:47421"
     environment:
