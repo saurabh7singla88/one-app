@@ -2,6 +2,8 @@
   "name": "initiative-tracker-backend",
   "version": "1.0.0",
   "description": "Backend API for Initiative Tracker",
+  "author": "Saurabh Singla",
+  "license": "MIT",
   "main": "src/server.js",
   "type": "module",
   "scripts": {

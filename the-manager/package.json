@@ -1,6 +1,8 @@
 {
   "name": "the-manager",
   "version": "1.0.0",
+  "author": "Saurabh Singla",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "docker:up":      "docker compose up -d",

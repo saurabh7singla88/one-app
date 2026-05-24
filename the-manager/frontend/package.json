@@ -2,6 +2,8 @@
   "name": "initiative-tracker-frontend",
   "private": true,
   "version": "1.0.0",
+  "author": "Saurabh Singla",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -314,6 +314,11 @@ export default function Layout() {
         <Container maxWidth="xl" disableGutters>
           <Outlet />
         </Container>
+        <Box component="footer" sx={{ mt: 4, pb: 2, textAlign: 'right' }}>
+          <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.7rem' }}>
+            Built by Saurabh Singla
+          </Typography>
+        </Box>
       </Box>
     </Box>
   );
