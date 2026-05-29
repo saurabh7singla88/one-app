@@ -4,7 +4,7 @@ import {
   Box, Typography, IconButton, Button, TextField, Tooltip, Chip,
   Dialog, DialogTitle, DialogContent, DialogActions, InputAdornment,
   CircularProgress, Divider, Menu, MenuItem, Collapse, Alert, Snackbar, Select,
-  FormControl, InputLabel,
+  FormControl, InputLabel, useTheme,
 } from '@mui/material';
 import {
   BookmarkBorder, Folder as FolderIcon, FolderOpen, Add, Search,
@@ -57,7 +57,7 @@ function FolderItem({ folder, depth, selected, onSelect, onAdd, onRename, onDele
         <Box sx={{ fontSize: '0.85rem', lineHeight: 1, flexShrink: 0 }}>{folder.icon}</Box>
 
         {/* Name */}
-        <Typography sx={{ fontSize: '0.8rem', flex: 1, color: isSelected ? '#6366f1' : '#374151', fontWeight: isSelected ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <Typography sx={{ fontSize: '0.8rem', flex: 1, color: isSelected ? '#6366f1' : 'text.primary', fontWeight: isSelected ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {folder.name}
         </Typography>
 
@@ -104,6 +104,8 @@ function FolderItem({ folder, depth, selected, onSelect, onAdd, onRename, onDele
 
 // ── Bookmark card ─────────────────────────────────────────────────────────────
 function BookmarkCard({ bookmark, onEdit, onDelete, onCopy }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [hovered, setHovered] = useState(false);
   let domain = '';
   try { domain = new URL(bookmark.url).hostname.replace('www.', ''); } catch {}
@@ -114,9 +116,9 @@ function BookmarkCard({ bookmark, onEdit, onDelete, onCopy }) {
       onMouseLeave={() => setHovered(false)}
       sx={{
         position: 'relative',
-        bgcolor: 'white',
+        bgcolor: 'background.paper',
         border: '1px solid',
-        borderColor: hovered ? 'rgba(99,102,241,0.3)' : '#e5e7eb',
+        borderColor: hovered ? 'rgba(99,102,241,0.3)' : theme.palette.divider,
         borderRadius: 2.5,
         overflow: 'hidden',
         transition: 'border-color 0.15s, box-shadow 0.15s',
@@ -130,7 +132,7 @@ function BookmarkCard({ bookmark, onEdit, onDelete, onCopy }) {
       {hovered && (
         <Box
           onClick={e => e.stopPropagation()}
-          sx={{ position: 'absolute', top: 6, right: 6, display: 'flex', gap: 0.25, bgcolor: 'white', borderRadius: 1.5, boxShadow: '0 1px 6px rgba(0,0,0,0.12)', p: 0.25, zIndex: 2 }}
+          sx={{ position: 'absolute', top: 6, right: 6, display: 'flex', gap: 0.25, bgcolor: 'background.paper', borderRadius: 1.5, boxShadow: '0 1px 6px rgba(0,0,0,0.12)', p: 0.25, zIndex: 2 }}
         >
           <Tooltip title="Copy URL" arrow><IconButton size="small" onClick={() => onCopy(bookmark.url)} sx={{ p: 0.4 }}><ContentCopy sx={{ fontSize: 13, color: '#64748b' }} /></IconButton></Tooltip>
           <Tooltip title="Edit" arrow><IconButton size="small" onClick={() => onEdit(bookmark)} sx={{ p: 0.4 }}><Edit sx={{ fontSize: 13, color: '#64748b' }} /></IconButton></Tooltip>
@@ -145,7 +147,7 @@ function BookmarkCard({ bookmark, onEdit, onDelete, onCopy }) {
             ? <Box component="img" src={bookmark.favicon} alt="" sx={{ width: 18, height: 18, borderRadius: 0.5, flexShrink: 0, mt: 0.15, objectFit: 'contain' }} onError={e => { e.target.style.display = 'none'; }} />
             : <BookmarkBorder sx={{ fontSize: 18, color: '#94a3b8', flexShrink: 0, mt: 0.15 }} />
           }
-          <Typography fontWeight={600} sx={{ fontSize: '0.83rem', color: '#111827', lineHeight: 1.35, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+          <Typography fontWeight={600} sx={{ fontSize: '0.83rem', color: 'text.primary', lineHeight: 1.35, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
             {bookmark.title}
           </Typography>
         </Box>
@@ -157,7 +159,7 @@ function BookmarkCard({ bookmark, onEdit, onDelete, onCopy }) {
 
         {/* Description */}
         {bookmark.description && (
-          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', mb: 0.5 }}>
+          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', mb: 0.5 }}>
             {bookmark.description}
           </Typography>
         )}
@@ -166,7 +168,7 @@ function BookmarkCard({ bookmark, onEdit, onDelete, onCopy }) {
         {bookmark.tags?.length > 0 && (
           <Box display="flex" flexWrap="wrap" gap={0.4} mt={0.5}>
             {bookmark.tags.slice(0, 4).map(t => (
-              <Chip key={t} label={t} size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: '#f0f9ff', color: '#0369a1', '& .MuiChip-label': { px: 0.6 } }} />
+              <Chip key={t} label={t} size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: isDark ? 'rgba(3,105,161,0.15)' : '#f0f9ff', color: isDark ? '#38bdf8' : '#0369a1', '& .MuiChip-label': { px: 0.6 } }} />
             ))}
             {bookmark.tags.length > 4 && <Typography sx={{ fontSize: '0.62rem', color: '#94a3b8', alignSelf: 'center' }}>+{bookmark.tags.length - 4}</Typography>}
           </Box>
@@ -191,6 +193,8 @@ function BookmarkCard({ bookmark, onEdit, onDelete, onCopy }) {
 
 // ── Bookmark list row ────────────────────────────────────────────────────────
 function BookmarkRow({ bookmark, onEdit, onDelete, onCopy }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [hovered, setHovered] = useState(false);
   let domain = '';
   try { domain = new URL(bookmark.url).hostname.replace('www.', ''); } catch {}
@@ -204,7 +208,7 @@ function BookmarkRow({ bookmark, onEdit, onDelete, onCopy }) {
         display: 'flex', alignItems: 'center', gap: 1.5,
         px: 2, py: 1.25, cursor: 'pointer',
         borderBottom: '1px solid #f1f5f9',
-        bgcolor: hovered ? '#fafafe' : 'white',
+        bgcolor: hovered ? (isDark ? 'rgba(99,102,241,0.06)' : '#fafafe') : 'background.paper',
         transition: 'background 0.1s',
         '&:last-child': { borderBottom: 0 },
       }}
@@ -216,7 +220,7 @@ function BookmarkRow({ bookmark, onEdit, onDelete, onCopy }) {
       }
 
       {/* Title */}
-      <Typography fontWeight={600} sx={{ fontSize: '0.83rem', color: '#111827', minWidth: 180, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>
+      <Typography fontWeight={600} sx={{ fontSize: '0.83rem', color: 'text.primary', minWidth: 180, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>
         {bookmark.title}
       </Typography>
 
@@ -226,14 +230,14 @@ function BookmarkRow({ bookmark, onEdit, onDelete, onCopy }) {
       </Typography>
 
       {/* Description */}
-      <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: { xs: 'none', md: 'block' } }}>
+      <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: { xs: 'none', md: 'block' } }}>
         {bookmark.description || ''}
       </Typography>
 
       {/* Tags */}
       <Box display="flex" gap={0.4} flexShrink={0} sx={{ display: { xs: 'none', lg: 'flex' } }}>
         {bookmark.tags?.slice(0, 3).map(t => (
-          <Chip key={t} label={t} size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: '#f0f9ff', color: '#0369a1', '& .MuiChip-label': { px: 0.6 } }} />
+          <Chip key={t} label={t} size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: isDark ? 'rgba(3,105,161,0.15)' : '#f0f9ff', color: isDark ? '#38bdf8' : '#0369a1', '& .MuiChip-label': { px: 0.6 } }} />
         ))}
       </Box>
 
@@ -378,6 +382,8 @@ function BookmarkDialog({ open, onClose, onSave, initial, folders }) {
 
 // ── Main page ────────────────────────────────────────────────────────────────
 export default function Bookmarks() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const dispatch = useDispatch();
   const { folders, bookmarks, loading } = useSelector(s => s.bookmarks);
 
@@ -474,16 +480,16 @@ export default function Bookmarks() {
   }, [selectedFolder, folders]);
 
   return (
-    <Box display="flex" height="100%" bgcolor="#f8fafc" overflow="hidden">
+    <Box display="flex" height="100%" bgcolor="background.default" overflow="hidden">
 
       {/* ── Left sidebar ─────────────────────────────────────────────────── */}
       <Box sx={{
         width: SIDEBAR_WIDTH, flexShrink: 0,
-        bgcolor: 'white', borderRight: '1px solid #e5e7eb',
+        bgcolor: 'background.paper', borderRight: `1px solid ${theme.palette.divider}`,
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
         <Box sx={{ px: 1.5, py: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Typography fontWeight={700} sx={{ fontSize: '0.82rem', color: '#374151', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Bookmarks</Typography>
+          <Typography fontWeight={700} sx={{ fontSize: '0.82rem', color: 'text.secondary', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Bookmarks</Typography>
           <Tooltip title="New folder"><IconButton size="small" onClick={() => openAddFolder(null)} sx={{ color: '#94a3b8' }}><Add sx={{ fontSize: 16 }} /></IconButton></Tooltip>
         </Box>
 
@@ -492,14 +498,14 @@ export default function Bookmarks() {
           <Box onClick={() => setSelectedFolder('all')}
             sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75, mx: 0.5, borderRadius: 1.5, cursor: 'pointer', bgcolor: selectedFolder === 'all' ? 'rgba(99,102,241,0.09)' : 'transparent', '&:hover': { bgcolor: 'rgba(0,0,0,0.04)' } }}>
             <BookmarkBorder sx={{ fontSize: 16, color: selectedFolder === 'all' ? '#6366f1' : '#94a3b8' }} />
-            <Typography sx={{ fontSize: '0.8rem', flex: 1, color: selectedFolder === 'all' ? '#6366f1' : '#374151', fontWeight: selectedFolder === 'all' ? 600 : 400 }}>All Bookmarks</Typography>
+            <Typography sx={{ fontSize: '0.8rem', flex: 1, color: selectedFolder === 'all' ? '#6366f1' : 'text.primary', fontWeight: selectedFolder === 'all' ? 600 : 400 }}>All Bookmarks</Typography>
           </Box>
 
           {/* Unsorted */}
           <Box onClick={() => setSelectedFolder('unsorted')}
             sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75, mx: 0.5, borderRadius: 1.5, cursor: 'pointer', bgcolor: selectedFolder === 'unsorted' ? 'rgba(99,102,241,0.09)' : 'transparent', '&:hover': { bgcolor: 'rgba(0,0,0,0.04)' } }}>
             <Inbox sx={{ fontSize: 16, color: selectedFolder === 'unsorted' ? '#6366f1' : '#94a3b8' }} />
-            <Typography sx={{ fontSize: '0.8rem', flex: 1, color: selectedFolder === 'unsorted' ? '#6366f1' : '#374151', fontWeight: selectedFolder === 'unsorted' ? 600 : 400 }}>Unsorted</Typography>
+            <Typography sx={{ fontSize: '0.8rem', flex: 1, color: selectedFolder === 'unsorted' ? '#6366f1' : 'text.primary', fontWeight: selectedFolder === 'unsorted' ? 600 : 400 }}>Unsorted</Typography>
           </Box>
 
           {rootFolders.length > 0 && <Divider sx={{ my: 1, mx: 1.5 }} />}
@@ -532,9 +538,9 @@ export default function Bookmarks() {
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
         {/* Toolbar */}
-        <Box sx={{ px: 3, py: 1.75, borderBottom: '1px solid #e5e7eb', bgcolor: 'white', display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box sx={{ px: 3, py: 1.75, borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: 'background.paper', display: 'flex', alignItems: 'center', gap: 2 }}>
           <Box>
-            <Typography fontWeight={700} sx={{ fontSize: '1rem', color: '#111827', lineHeight: 1.2 }}>{currentFolderName}</Typography>
+            <Typography fontWeight={700} sx={{ fontSize: '1rem', color: 'text.primary', lineHeight: 1.2 }}>{currentFolderName}</Typography>
             {!loading && <Typography sx={{ fontSize: '0.72rem', color: '#94a3b8' }}>{bookmarks.length} bookmark{bookmarks.length !== 1 ? 's' : ''}</Typography>}
           </Box>
 
@@ -551,7 +557,7 @@ export default function Bookmarks() {
           />
 
           {/* View toggle */}
-          <Box sx={{ display: 'flex', border: '1px solid #e5e7eb', borderRadius: 1.5, overflow: 'hidden', flexShrink: 0 }}>
+          <Box sx={{ display: 'flex', border: `1px solid ${theme.palette.divider}`, borderRadius: 1.5, overflow: 'hidden', flexShrink: 0 }}>
             <Tooltip title="Grid view">
               <IconButton size="small" onClick={() => { setViewMode('grid'); localStorage.setItem('bookmarks_view','grid'); }}
                 sx={{ borderRadius: 0, px: 0.75, py: 0.5, bgcolor: viewMode === 'grid' ? '#ede9fe' : 'transparent', color: viewMode === 'grid' ? '#6366f1' : '#94a3b8' }}>
@@ -580,10 +586,10 @@ export default function Bookmarks() {
             <Box display="flex" justifyContent="center" pt={6}><CircularProgress /></Box>
           ) : bookmarks.length === 0 ? (
             <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" pt={8} gap={2}>
-              <Box sx={{ width: 64, height: 64, borderRadius: '50%', bgcolor: '#f0f9ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Box sx={{ width: 64, height: 64, borderRadius: '50%', bgcolor: isDark ? 'rgba(3,105,161,0.15)' : '#f0f9ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <BookmarkBorder sx={{ fontSize: 32, color: '#6366f1' }} />
               </Box>
-              <Typography fontWeight={600} sx={{ color: '#374151' }}>
+              <Typography fontWeight={600} sx={{ color: 'text.primary' }}>
                 {search ? 'No bookmarks match your search' : 'No bookmarks yet'}
               </Typography>
               <Typography sx={{ fontSize: '0.85rem', color: '#9ca3af', textAlign: 'center', maxWidth: 320 }}>
@@ -608,7 +614,7 @@ export default function Bookmarks() {
               ))}
             </Box>
           ) : (
-            <Box sx={{ bgcolor: 'white', border: '1px solid #e5e7eb', borderRadius: 2.5, overflow: 'hidden' }}>
+            <Box sx={{ bgcolor: 'background.paper', border: `1px solid ${theme.palette.divider}`, borderRadius: 2.5, overflow: 'hidden' }}>
               {bookmarks.map(b => (
                 <BookmarkRow key={b.id} bookmark={b}
                   onEdit={(bk) => { setEditTarget(bk); setDialogOpen(true); }}

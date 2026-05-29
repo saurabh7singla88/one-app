@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTheme } from '@mui/material/styles';
 import {
   Drawer, Box, Typography, IconButton, Chip,
   CircularProgress, Tooltip, Divider, Button,
@@ -12,17 +13,17 @@ import { useNavigate } from 'react-router-dom';
 import AISettingsDialog from './AISettingsDialog';
 
 const PROVIDER_BADGE = {
-  ollama:            { label: '🦙 Ollama',   color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' },
-  openai:            { label: '✨ OpenAI',    color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe' },
-  openai_compatible: { label: '🔌 Custom AI', color: '#6b21a8', bg: '#faf5ff', border: '#e9d5ff' },
-  gemini:            { label: '♊ Gemini',    color: '#b45309', bg: '#fffbeb', border: '#fde68a' },
+  ollama:            { label: '🦙 Ollama',   color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0', darkColor: '#4ade80', darkBg: 'rgba(21,128,61,0.15)',  darkBorder: 'rgba(21,128,61,0.3)'  },
+  openai:            { label: '✨ OpenAI',    color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe', darkColor: '#60a5fa', darkBg: 'rgba(59,130,246,0.15)', darkBorder: 'rgba(59,130,246,0.3)' },
+  openai_compatible: { label: '🔌 Custom AI', color: '#6b21a8', bg: '#faf5ff', border: '#e9d5ff', darkColor: '#c084fc', darkBg: 'rgba(168,85,247,0.15)', darkBorder: 'rgba(168,85,247,0.3)' },
+  gemini:            { label: '♊ Gemini',    color: '#b45309', bg: '#fffbeb', border: '#fde68a', darkColor: '#fbbf24', darkBg: 'rgba(251,191,36,0.15)', darkBorder: 'rgba(251,191,36,0.3)' },
 };
 
 const STATUS_CONFIG = {
-  OPEN:        { label: 'Open',        color: '#64748b', bg: '#f1f5f9' },
-  IN_PROGRESS: { label: 'In Progress', color: '#2563eb', bg: '#eff6ff' },
-  BLOCKED:     { label: 'Blocked',     color: '#dc2626', bg: '#fef2f2' },
-  ON_HOLD:     { label: 'On Hold',     color: '#d97706', bg: '#fffbeb' },
+  OPEN:        { label: 'Open',        color: '#64748b', bg: '#f1f5f9', darkBg: 'rgba(100,116,139,0.15)' },
+  IN_PROGRESS: { label: 'In Progress', color: '#2563eb', bg: '#eff6ff', darkBg: 'rgba(37,99,235,0.15)'   },
+  BLOCKED:     { label: 'Blocked',     color: '#dc2626', bg: '#fef2f2', darkBg: 'rgba(220,38,38,0.15)'   },
+  ON_HOLD:     { label: 'On Hold',     color: '#d97706', bg: '#fffbeb', darkBg: 'rgba(217,119,6,0.15)'   },
 };
 
 const PRIORITY_COLOR = {
@@ -51,7 +52,7 @@ export function AISuggestionsButton({ canvasId, sx = {} }) {
             px: 1.5,
             py: 0.5,
             borderRadius: 2,
-            '&:hover': { borderColor: '#7c3aed', bgcolor: '#f5f3ff' },
+            '&:hover': { borderColor: '#7c3aed', bgcolor: 'rgba(124,58,237,0.08)' },
             ...sx,
           }}
         >
@@ -66,6 +67,8 @@ export function AISuggestionsButton({ canvasId, sx = {} }) {
 // ─── Panel (Drawer) ─────────────────────────────────────────────────────────
 export default function AISuggestionsPanel({ open, onClose, canvasId }) {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null); // { suggestions, analysedCount, generatedAt, llmProvider }
   const [error, setError] = useState(null);
@@ -100,7 +103,7 @@ export default function AISuggestionsPanel({ open, onClose, canvasId }) {
       PaperProps={{
         sx: {
           width: { xs: '100vw', sm: 420 },
-          borderLeft: '1px solid #e2e8f0',
+          borderLeft: `1px solid ${theme.palette.divider}`,
           boxShadow: '-4px 0 32px rgba(0,0,0,0.08)',
         },
       }}
@@ -176,8 +179,8 @@ export default function AISuggestionsPanel({ open, onClose, canvasId }) {
             <Box
               sx={{
                 px: 3, py: 1.5,
-                bgcolor: '#faf5ff',
-                borderBottom: '1px solid #ede9fe',
+                bgcolor: isDark ? 'rgba(124,58,237,0.08)' : '#faf5ff',
+                borderBottom: `1px solid ${isDark ? 'rgba(124,58,237,0.15)' : '#ede9fe'}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               }}
             >
@@ -191,7 +194,7 @@ export default function AISuggestionsPanel({ open, onClose, canvasId }) {
                     <Chip
                       label={badge.label}
                       size="small"
-                      sx={{ bgcolor: badge.bg, color: badge.color, border: `1px solid ${badge.border}`, fontWeight: 600, fontSize: '0.65rem', height: 18 }}
+                      sx={{ bgcolor: isDark ? badge.darkBg : badge.bg, color: isDark ? badge.darkColor : badge.color, border: `1px solid ${isDark ? badge.darkBorder : badge.border}`, fontWeight: 600, fontSize: '0.65rem', height: 18 }}
                     />
                   );
                 })()}
@@ -209,7 +212,7 @@ export default function AISuggestionsPanel({ open, onClose, canvasId }) {
                   <Box
                     sx={{
                       px: 3, py: 2.25,
-                      '&:hover': { bgcolor: '#faf5ff' },
+                      '&:hover': { bgcolor: isDark ? 'rgba(124,58,237,0.08)' : '#faf5ff' },
                       cursor: 'pointer',
                       transition: 'background 0.12s',
                     }}
@@ -224,7 +227,7 @@ export default function AISuggestionsPanel({ open, onClose, canvasId }) {
                             ? 'linear-gradient(135deg,#7c3aed,#a78bfa)'
                             : idx === 1
                               ? 'linear-gradient(135deg,#2563eb,#60a5fa)'
-                              : '#e2e8f0',
+                              : (isDark ? '#334155' : '#e2e8f0'),
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           flexShrink: 0, mt: 0.1,
                         }}
@@ -249,7 +252,7 @@ export default function AISuggestionsPanel({ open, onClose, canvasId }) {
                       <Chip
                         label={sc.label}
                         size="small"
-                        sx={{ bgcolor: sc.bg, color: sc.color, fontWeight: 600, fontSize: '0.68rem', height: 20, border: 0 }}
+                        sx={{ bgcolor: isDark ? sc.darkBg : sc.bg, color: sc.color, fontWeight: 600, fontSize: '0.68rem', height: 20, border: 0 }}
                       />
                       <Box display="flex" alignItems="center" gap={0.4}>
                         <FiberManualRecord sx={{ fontSize: 8, color: priorityColor }} />
@@ -267,12 +270,14 @@ export default function AISuggestionsPanel({ open, onClose, canvasId }) {
                           label={`${r.icon} ${r.label}`}
                           size="small"
                           sx={{
-                            bgcolor: r.icon === '🧠' ? '#fdf4ff' : '#f5f3ff',
-                            color:   r.icon === '🧠' ? '#7e22ce'  : '#5b21b6',
+                            bgcolor: r.icon === '🧠'
+                              ? (isDark ? 'rgba(126,34,206,0.15)' : '#fdf4ff')
+                              : (isDark ? 'rgba(91,33,182,0.15)' : '#f5f3ff'),
+                            color:   r.icon === '🧠' ? '#a78bfa' : '#8b5cf6',
                             fontWeight: 500,
                             fontSize: '0.68rem',
                             height: 20,
-                            border: `1px solid ${r.icon === '🧠' ? '#e9d5ff' : '#ede9fe'}`,
+                            border: `1px solid ${isDark ? 'rgba(167,139,250,0.2)' : (r.icon === '🧠' ? '#e9d5ff' : '#ede9fe')}`,
                           }}
                         />
                       ))}
@@ -286,8 +291,8 @@ export default function AISuggestionsPanel({ open, onClose, canvasId }) {
                         px={1.25}
                         py={0.75}
                         sx={{
-                          bgcolor: '#fdf4ff',
-                          border: '1px solid #e9d5ff',
+                          bgcolor: isDark ? 'rgba(126,34,206,0.12)' : '#fdf4ff',
+                          border: `1px solid ${isDark ? 'rgba(167,139,250,0.2)' : '#e9d5ff'}`,
                           borderRadius: 1.5,
                         }}
                       >
@@ -309,7 +314,7 @@ export default function AISuggestionsPanel({ open, onClose, canvasId }) {
             })}
 
             {/* Footer note */}
-            <Box px={3} py={2} sx={{ bgcolor: '#faf5ff', borderTop: '1px solid #ede9fe' }}>
+            <Box px={3} py={2} sx={{ bgcolor: isDark ? 'rgba(124,58,237,0.08)' : '#faf5ff', borderTop: `1px solid ${isDark ? 'rgba(124,58,237,0.15)' : '#ede9fe'}` }}>
               <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
                 Ranked by urgency · priority · staleness · blocked sub-items · due date{data.llmUsed ? ' · description read by LLM' : ''}
               </Typography>

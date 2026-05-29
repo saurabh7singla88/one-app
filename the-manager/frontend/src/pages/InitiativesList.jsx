@@ -8,7 +8,7 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, Select, MenuItem, FormControl, InputLabel,
   Grid, CircularProgress, Divider, Tooltip, InputAdornment,
-  Autocomplete
+  Autocomplete, useTheme
 } from '@mui/material';
 import { Add, Edit, Delete, ExpandMore, ExpandLess, AccountTree, AddCircleOutline, Search, Visibility, Clear, Label, PersonAdd, IosShare, Assessment, DragIndicator } from '@mui/icons-material';
 import StatusReportDialog from '../components/StatusReportDialog';
@@ -30,19 +30,19 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 const STATUS_CONFIG = {
-  OPEN:        { label: 'Open',        color: '#64748b', bg: '#f1f5f9' },
-  IN_PROGRESS: { label: 'In Progress', color: '#2563eb', bg: '#eff6ff' },
-  BLOCKED:     { label: 'Blocked',     color: '#dc2626', bg: '#fef2f2' },
-  ON_HOLD:     { label: 'On Hold',     color: '#d97706', bg: '#fffbeb' },
-  COMPLETED:   { label: 'Completed',   color: '#059669', bg: '#f0fdf4' },
-  CANCELLED:   { label: 'Cancelled',   color: '#6b7280', bg: '#f9fafb' },
+  OPEN:        { label: 'Open',        color: '#64748b', bg: '#f1f5f9', darkBg: 'rgba(100,116,139,0.15)' },
+  IN_PROGRESS: { label: 'In Progress', color: '#2563eb', bg: '#eff6ff', darkBg: 'rgba(37,99,235,0.15)'   },
+  BLOCKED:     { label: 'Blocked',     color: '#dc2626', bg: '#fef2f2', darkBg: 'rgba(220,38,38,0.15)'   },
+  ON_HOLD:     { label: 'On Hold',     color: '#d97706', bg: '#fffbeb', darkBg: 'rgba(217,119,6,0.15)'   },
+  COMPLETED:   { label: 'Completed',   color: '#059669', bg: '#f0fdf4', darkBg: 'rgba(5,150,105,0.15)'   },
+  CANCELLED:   { label: 'Cancelled',   color: '#6b7280', bg: '#f9fafb', darkBg: 'rgba(107,114,128,0.15)' },
 };
 
 const PRIORITY_CONFIG = {
-  CRITICAL: { color: '#dc2626', bg: '#fef2f2', border: '#dc2626' },
-  HIGH:     { color: '#d97706', bg: '#fffbeb', border: '#d97706' },
-  MEDIUM:   { color: '#2563eb', bg: '#eff6ff', border: '#2563eb' },
-  LOW:      { color: '#64748b', bg: '#f1f5f9', border: '#64748b' },
+  CRITICAL: { color: '#dc2626', bg: '#fef2f2', border: '#dc2626', darkBg: 'rgba(220,38,38,0.15)'   },
+  HIGH:     { color: '#d97706', bg: '#fffbeb', border: '#d97706', darkBg: 'rgba(217,119,6,0.15)'   },
+  MEDIUM:   { color: '#2563eb', bg: '#eff6ff', border: '#2563eb', darkBg: 'rgba(37,99,235,0.15)'   },
+  LOW:      { color: '#64748b', bg: '#f1f5f9', border: '#64748b', darkBg: 'rgba(100,116,139,0.15)' },
 };
 
 const TYPE_LABELS = { INITIATIVE: 'Initiative', TASK: 'Task', SUBTASK: 'Subtask' };
@@ -112,6 +112,8 @@ function SortableInitiativeItem({ id, children }) {
 export default function InitiativesList() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [searchParams] = useSearchParams();
   const { items, loading, allItems } = useSelector((state) => state.initiatives);
   const { activeCanvasId, canvases } = useSelector((state) => ({
@@ -430,13 +432,13 @@ export default function InitiativesList() {
             py: 1.5,
             ml: level * 3,
             bgcolor: 'background.paper',
-            border: '1px solid #e2e8f0',
+            border: `1px solid ${theme.palette.divider}`,
             borderLeft: `3px solid ${pc.border}`,
             borderRadius: 2,
             mb: 1,
             cursor: 'pointer',
             transition: 'box-shadow 0.15s, background-color 0.15s',
-            '&:hover': { boxShadow: '0 2px 8px rgba(0,0,0,0.07)', bgcolor: '#f8fafc' },
+            '&:hover': { boxShadow: '0 2px 8px rgba(0,0,0,0.07)', bgcolor: isDark ? 'rgba(99,102,241,0.06)' : '#f8fafc' },
           }}
         >
           {/* Expand toggle */}
@@ -458,7 +460,7 @@ export default function InitiativesList() {
                 label={TYPE_LABELS[initiative.type] || initiative.type}
                 size="small"
                 variant="outlined"
-                sx={{ height: 18, fontSize: '0.65rem', px: 0.5, color: 'text.secondary', borderColor: '#e2e8f0' }}
+                sx={{ height: 18, fontSize: '0.65rem', px: 0.5, color: 'text.secondary', borderColor: theme.palette.divider }}
               />
             </Box>
             {initiative.description && (
@@ -472,7 +474,7 @@ export default function InitiativesList() {
                   value={initiative.status}
                   onChange={(e) => handleStatusChange(initiative.id, e.target.value)}
                   sx={{
-                    fontSize: '0.72rem', height: 24, bgcolor: sc.bg, color: sc.color,
+                    fontSize: '0.72rem', height: 24, bgcolor: isDark ? sc.darkBg : sc.bg, color: sc.color,
                     fontWeight: 500, '.MuiOutlinedInput-notchedOutline': { border: 'none' },
                     '.MuiSelect-icon': { color: sc.color, right: 2 },
                     pr: 0.5,
@@ -488,7 +490,7 @@ export default function InitiativesList() {
                   value={initiative.priority}
                   onChange={(e) => handlePriorityChange(initiative.id, e.target.value)}
                   sx={{
-                    fontSize: '0.72rem', height: 24, bgcolor: pc.bg, color: pc.color,
+                    fontSize: '0.72rem', height: 24, bgcolor: isDark ? pc.darkBg : pc.bg, color: pc.color,
                     fontWeight: 500, '.MuiOutlinedInput-notchedOutline': { border: 'none' },
                     '.MuiSelect-icon': { color: pc.color, right: 2 },
                     pr: 0.5,
@@ -704,7 +706,7 @@ export default function InitiativesList() {
           sx={{
             bgcolor: 'background.paper',
             borderRadius: 3,
-            border: '1px solid #e2e8f0',
+            border: `1px solid ${theme.palette.divider}`,
             p: 6,
             textAlign: 'center',
           }}

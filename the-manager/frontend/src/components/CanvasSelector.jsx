@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTheme } from '@mui/material/styles';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   Box, Typography, IconButton, Tooltip, Dialog, DialogTitle,
@@ -18,6 +19,10 @@ const PALETTE = [
 
 export default function CanvasSelector({ screen, countsByCanvas }) {
   const dispatch = useDispatch();
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+  const inactiveBg = isDark ? 'rgba(255,255,255,0.07)' : '#f1f5f9';
+  const inactiveHover = isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0';
   const canvases = useSelector(s => s.canvas.canvases);
   const activeCanvasId = useSelector(s => s.canvas.activeCanvasId[screen] ?? null);
   const loading = useSelector(s => s.canvas.loading);
@@ -88,7 +93,7 @@ export default function CanvasSelector({ screen, countsByCanvas }) {
         px: 1.5,
         py: 1,
         bgcolor: 'background.paper',
-        border: '1px solid #e2e8f0',
+        border: `1px solid ${theme.palette.divider}`,
         borderRadius: 3,
         flexWrap: 'wrap',
       }}
@@ -107,11 +112,11 @@ export default function CanvasSelector({ screen, countsByCanvas }) {
           height: 26,
           fontSize: '0.75rem',
           fontWeight: activeCanvasId === null ? 700 : 500,
-          bgcolor: activeCanvasId === null ? '#1e1b4b' : '#f1f5f9',
+          bgcolor: activeCanvasId === null ? '#1e1b4b' : inactiveBg,
           color: activeCanvasId === null ? 'white' : 'text.secondary',
           border: 'none',
           cursor: 'pointer',
-          '&:hover': { bgcolor: activeCanvasId === null ? '#1e1b4b' : '#e2e8f0' },
+          '&:hover': { bgcolor: activeCanvasId === null ? '#1e1b4b' : inactiveHover },
         }}
       />
 
@@ -150,11 +155,11 @@ export default function CanvasSelector({ screen, countsByCanvas }) {
               height: 26,
               fontSize: '0.75rem',
               fontWeight: active ? 700 : 500,
-              bgcolor: active ? canvas.color : '#f1f5f9',
+              bgcolor: active ? canvas.color : inactiveBg,
               color: active ? 'white' : 'text.secondary',
               border: active ? 'none' : '1px solid transparent',
               cursor: 'pointer',
-              '&:hover': { bgcolor: active ? canvas.color : '#e2e8f0', opacity: active ? 0.9 : 1 },
+              '&:hover': { bgcolor: active ? canvas.color : inactiveHover, opacity: active ? 0.9 : 1 },
             }}
           />
         );

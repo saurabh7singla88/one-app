@@ -8,7 +8,7 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Menu, MenuItem as MuiMenuItem, ListItemIcon,
   Avatar, AvatarGroup,
-  Autocomplete
+  Autocomplete, useTheme
 } from '@mui/material';
 import {
   Add, Search, Clear, Edit, Delete, Label,
@@ -30,10 +30,10 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 const PRIORITY_CONFIG = {
-  CRITICAL: { color: '#dc2626', bg: '#fef2f2' },
-  HIGH:     { color: '#d97706', bg: '#fffbeb' },
-  MEDIUM:   { color: '#6366f1', bg: '#eff6ff' },
-  LOW:      { color: '#64748b', bg: '#f1f5f9' },
+  CRITICAL: { color: '#dc2626', bg: '#fef2f2', darkBg: 'rgba(220,38,38,0.15)'   },
+  HIGH:     { color: '#d97706', bg: '#fffbeb', darkBg: 'rgba(217,119,6,0.15)'   },
+  MEDIUM:   { color: '#6366f1', bg: '#eff6ff', darkBg: 'rgba(99,102,241,0.15)'  },
+  LOW:      { color: '#64748b', bg: '#f1f5f9', darkBg: 'rgba(100,116,139,0.15)' },
 };
 
 const TIMELINE_PRESETS = [
@@ -111,6 +111,8 @@ function SortableTaskItem({ id, children }) {
 
 export default function Tasks() {
   const dispatch = useDispatch();
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const { tasks, tasksLoading } = useSelector(s => s.initiatives);
   const { activeCanvasId, canvases } = useSelector(s => ({
     activeCanvasId: s.canvas.activeCanvasId.tasks,
@@ -377,7 +379,7 @@ export default function Tasks() {
       {/* Quick-add bar */}
       <Box
         mb={3}
-        sx={{ bgcolor: 'background.paper', border: '1px solid #e2e8f0', borderRadius: 3, p: 1.5 }}
+        sx={{ bgcolor: 'background.paper', border: `1px solid ${theme.palette.divider}`, borderRadius: 3, p: 1.5 }}
       >
         <Box display="flex" gap={1.5}>
           <CheckBoxIcon sx={{ color: 'text.disabled', mt: 0.5, flexShrink: 0 }} />
@@ -469,7 +471,7 @@ export default function Tasks() {
                 {idx > 0 && <Divider />}
                 <Box
                   display="flex" alignItems="center" gap={1.5} px={2} py={1.25}
-                  sx={{ '&:hover': { bgcolor: '#f8fafc' }, transition: 'background 0.1s' }}
+                  sx={{ '&:hover': { bgcolor: isDark ? 'rgba(99,102,241,0.06)' : '#f8fafc' }, transition: 'background 0.1s' }}
                 >
                   {/* Checkbox */}
                   <Checkbox
@@ -504,12 +506,12 @@ export default function Tasks() {
                         <Chip
                           label={`↗ ${linkedInit.title}`}
                           size="small"
-                          sx={{ height: 16, fontSize: '0.65rem', bgcolor: '#f0fdf4', color: '#065f46', border: 0, fontWeight: 500 }}
+                          sx={{ height: 16, fontSize: '0.65rem', bgcolor: isDark ? 'rgba(5,150,105,0.15)' : '#f0fdf4', color: isDark ? '#34d399' : '#065f46', border: 0, fontWeight: 500 }}
                         />
                       )}
                       {(task.tags || []).map(tag => (
                         <Chip key={tag} label={`#${tag}`} size="small"
-                          sx={{ height: 16, fontSize: '0.65rem', bgcolor: '#eff6ff', color: '#1d4ed8', border: 0 }}
+                          sx={{ height: 16, fontSize: '0.65rem', bgcolor: isDark ? 'rgba(37,99,235,0.15)' : '#eff6ff', color: isDark ? '#60a5fa' : '#1d4ed8', border: 0 }}
                         />
                       ))}
                     </Box>
@@ -532,7 +534,7 @@ export default function Tasks() {
                       size="small"
                       sx={{
                         height: 18, fontSize: '0.65rem', fontWeight: 600,
-                        bgcolor: PRIORITY_CONFIG[task.priority]?.bg,
+                        bgcolor: isDark ? PRIORITY_CONFIG[task.priority]?.darkBg : PRIORITY_CONFIG[task.priority]?.bg,
                         color: PRIORITY_CONFIG[task.priority]?.color,
                         border: 0,
                       }}

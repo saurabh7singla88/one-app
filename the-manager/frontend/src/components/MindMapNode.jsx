@@ -1,11 +1,13 @@
 import { memo, useState, useRef, useEffect } from 'react';
 import { Handle, Position } from 'reactflow';
-import { Box, Typography, LinearProgress, IconButton, Tooltip } from '@mui/material';
+import { Box, Typography, LinearProgress, IconButton, Tooltip, useTheme } from '@mui/material';
 import { ExpandMore, ExpandLess, OpenInNew, Add } from '@mui/icons-material';
 
 // Draft node — appears directly on canvas when user clicks "+".
 // useEffect focuses the input after ReactFlow settles; Enter=save, Esc=cancel, blur=save if non-empty.
 function DraftNode({ data }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const inputRef = useRef(null);
   const confirmed = useRef(false);
 
@@ -31,7 +33,7 @@ function DraftNode({ data }) {
   return (
     <Box sx={{
       position: 'relative',
-      bgcolor: '#f5f3ff',
+      bgcolor: isDark ? 'rgba(99,102,241,0.15)' : '#f5f3ff',
       border: '2px dashed #818cf8',
       borderRadius: '12px',
       p: '11px 12px 10px',
@@ -51,7 +53,7 @@ function DraftNode({ data }) {
         style={{
           width: '100%', border: 'none', outline: 'none',
           background: 'transparent', fontSize: '0.84rem', fontWeight: 600,
-          color: '#1e293b', fontFamily: 'inherit', lineHeight: 1.4,
+          color: isDark ? '#f1f5f9' : '#1e293b', fontFamily: 'inherit', lineHeight: 1.4,
           letterSpacing: '-0.01em', padding: 0,
         }}
       />
@@ -65,6 +67,8 @@ function DraftNode({ data }) {
 
 // Floating "+" button — visibility driven by React state (hovered prop), not CSS class
 function AddBtn({ placement, onClick, tooltip, visible }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const isBottom = placement === 'bottom';
   return (
     <Tooltip title={tooltip} placement={placement} arrow>
@@ -84,12 +88,12 @@ function AddBtn({ placement, onClick, tooltip, visible }) {
           transition: 'opacity 0.14s, transform 0.14s',
           ...(isBottom
             ? { background: 'linear-gradient(135deg, #6366f1, #818cf8)', color: 'white', border: '2px solid white', boxShadow: '0 2px 8px rgba(99,102,241,0.45)' }
-            : { bgcolor: 'white', color: '#6366f1', border: '1.5px solid #c7d2fe', boxShadow: '0 2px 6px rgba(0,0,0,0.1)' }
+            : { bgcolor: isDark ? 'background.paper' : 'white', color: '#6366f1', border: '1.5px solid #c7d2fe', boxShadow: '0 2px 6px rgba(0,0,0,0.1)' }
           ),
           zIndex: 20,
           '&:hover': isBottom
             ? { background: 'linear-gradient(135deg, #4f46e5, #6366f1)', transform: 'translateX(-50%) scale(1.18)' }
-            : { bgcolor: '#eff6ff', border: '1.5px solid #6366f1', transform: 'translateY(-50%) scale(1.18)' },
+            : { bgcolor: isDark ? 'rgba(99,102,241,0.15)' : '#eff6ff', border: '1.5px solid #6366f1', transform: 'translateY(-50%) scale(1.18)' },
         }}
       >
         <Add sx={{ fontSize: 13 }} />
@@ -118,6 +122,8 @@ function MindMapNode({ data, selected }) {
   // Render inline-edit draft node when spawned from canvas
   if (data.isDraft) return <DraftNode data={data} />;
 
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [hovered, setHovered] = useState(false);
   const showActions = hovered || selected;
 
@@ -133,8 +139,8 @@ function MindMapNode({ data, selected }) {
       onMouseLeave={() => setHovered(false)}
       sx={{
         position: 'relative',
-        bgcolor: 'rgba(255,255,255,0.98)',
-        border: `1.5px solid ${selected ? '#6366f1' : hovered ? 'rgba(99,102,241,0.35)' : 'rgba(0,0,0,0.07)'}`,
+        bgcolor: isDark ? 'rgba(30,41,59,0.98)' : 'rgba(255,255,255,0.98)',
+        border: `1.5px solid ${selected ? '#6366f1' : hovered ? 'rgba(99,102,241,0.35)' : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)')}`,
         borderLeft: `4px solid ${priorityColor}`,
         borderRadius: '12px',
         p: '11px 12px 10px',
@@ -153,7 +159,7 @@ function MindMapNode({ data, selected }) {
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={0.5}>
         <Typography
           fontWeight={600}
-          sx={{ wordBreak: 'break-word', flex: 1, lineHeight: 1.4, fontSize: '0.84rem', color: '#1e293b', letterSpacing: '-0.01em' }}
+          sx={{ wordBreak: 'break-word', flex: 1, lineHeight: 1.4, fontSize: '0.84rem', color: 'text.primary', letterSpacing: '-0.01em' }}
         >
           {initiative.title}
         </Typography>
@@ -164,7 +170,7 @@ function MindMapNode({ data, selected }) {
               <IconButton
                 size="small"
                 onClick={(e) => { e.stopPropagation(); onToggleCollapse(initiative.id); }}
-                sx={{ p: 0.3, color: '#94a3b8', '&:hover': { color: '#6366f1', bgcolor: '#eff6ff' }, borderRadius: 1 }}
+                sx={{ p: 0.3, color: '#94a3b8', '&:hover': { color: '#6366f1', bgcolor: isDark ? 'rgba(99,102,241,0.15)' : '#eff6ff' }, borderRadius: 1 }}
               >
                 {isCollapsed ? <ExpandMore sx={{ fontSize: 14 }} /> : <ExpandLess sx={{ fontSize: 14 }} />}
               </IconButton>
@@ -174,7 +180,7 @@ function MindMapNode({ data, selected }) {
             <IconButton
               size="small"
               onClick={(e) => { e.stopPropagation(); onOpenDetails(initiative); }}
-              sx={{ p: 0.3, color: '#cbd5e1', '&:hover': { color: '#6366f1', bgcolor: '#eff6ff' }, borderRadius: 1 }}
+              sx={{ p: 0.3, color: '#cbd5e1', '&:hover': { color: '#6366f1', bgcolor: isDark ? 'rgba(99,102,241,0.15)' : '#eff6ff' }, borderRadius: 1 }}
             >
               <OpenInNew sx={{ fontSize: 12 }} />
             </IconButton>
@@ -187,7 +193,7 @@ function MindMapNode({ data, selected }) {
         <Box
           sx={{
             display: 'inline-flex', alignItems: 'center', gap: 0.4,
-            bgcolor: sc.bg, color: sc.color, fontWeight: 600, fontSize: '0.64rem',
+            bgcolor: isDark ? `${sc.border}28` : sc.bg, color: isDark ? sc.border : sc.color, fontWeight: 600, fontSize: '0.64rem',
             px: 0.8, py: 0.2, borderRadius: '20px', lineHeight: 1.6,
           }}
         >
@@ -211,7 +217,7 @@ function MindMapNode({ data, selected }) {
           {initiative.tags.slice(0, 3).map(tag => (
             <Box
               key={tag}
-              sx={{ bgcolor: '#f0f9ff', color: '#0369a1', fontWeight: 500, fontSize: '0.58rem', px: 0.55, py: 0.1, borderRadius: '5px', lineHeight: 1.6 }}
+              sx={{ bgcolor: isDark ? 'rgba(3,105,161,0.18)' : '#f0f9ff', color: isDark ? '#38bdf8' : '#0369a1', fontWeight: 500, fontSize: '0.58rem', px: 0.55, py: 0.1, borderRadius: '5px', lineHeight: 1.6 }}
             >
               #{tag}
             </Box>
@@ -233,7 +239,7 @@ function MindMapNode({ data, selected }) {
             variant="determinate"
             value={initiative.progress}
             sx={{
-              height: 4, borderRadius: 4, bgcolor: '#f1f5f9',
+              height: 4, borderRadius: 4, bgcolor: isDark ? 'rgba(255,255,255,0.1)' : '#f1f5f9',
               '& .MuiLinearProgress-bar': {
                 borderRadius: 4,
                 background: initiative.progress === 100 ? '#10b981' : 'linear-gradient(90deg, #6366f1, #818cf8)',

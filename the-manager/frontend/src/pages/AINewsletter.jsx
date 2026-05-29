@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Box, Typography, IconButton, Chip, CircularProgress,
   Divider, Tooltip, TextField, InputAdornment, Alert,
-  Button, Dialog, DialogTitle, DialogContent, DialogActions,
+  Button, Dialog, DialogTitle, DialogContent, DialogActions, useTheme,
 } from '@mui/material';
 import {
   Refresh, Email, CalendarMonth, InboxOutlined,
@@ -43,7 +43,7 @@ function renderEmailBody(text) {
     <Typography
       key={i}
       variant="body2"
-      sx={{ mb: 1.5, lineHeight: 1.8, color: '#374151', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+      sx={{ mb: 1.5, lineHeight: 1.8, color: 'text.primary', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
     >
       {para.trim()}
     </Typography>
@@ -68,7 +68,7 @@ function SummaryPanel({ text }) {
         </Tooltip>
       </Box>
       {text.split(/\n{2,}/).map((para, i) => (
-        <Typography key={i} variant="body2" sx={{ mb: 1.5, lineHeight: 1.75, whiteSpace: 'pre-wrap', color: '#1e293b' }}>
+        <Typography key={i} variant="body2" sx={{ mb: 1.5, lineHeight: 1.75, whiteSpace: 'pre-wrap', color: 'text.primary' }}>
           {para}
         </Typography>
       ))}
@@ -80,6 +80,9 @@ function SummaryPanel({ text }) {
 const GMAIL_LABEL = 'AI Newsletter';
 
 export default function AINewsletter() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+  const accentBg = isDark ? 'rgba(8,145,178,0.12)' : ACCENT_BG;
   const today = format(new Date(), 'yyyy-MM-dd');
 
   const [date, setDate]         = useState(today);
@@ -178,11 +181,11 @@ export default function AINewsletter() {
   // ── layout ──────────────────────────────────────────────────────────────────
   return (
     <>
-      <Box display="flex" height="100vh" overflow="hidden" bgcolor="#f0fdff">
+      <Box display="flex" height="100vh" overflow="hidden" bgcolor={isDark ? 'background.default' : '#f0fdff'}>
 
         {/* ── Left panel ───────────────────────────────────────────────────── */}
         <Box sx={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column',
-          borderRight: '1px solid #cffafe', bgcolor: '#ffffff' }}>
+          borderRight: `1px solid ${theme.palette.divider}`, bgcolor: 'background.paper' }}>
 
           {/* Header */}
           <Box sx={{ px: 2.5, pt: 2.5, pb: 1.5 }}>
@@ -204,7 +207,7 @@ export default function AINewsletter() {
                       sx={{
                         borderColor: ACCENT_BORDER, color: ACCENT, fontWeight: 600,
                         fontSize: '0.7rem', borderRadius: 2, px: 1, py: 0.3, textTransform: 'none',
-                        '&:hover': { borderColor: ACCENT, bgcolor: ACCENT_BG },
+                        '&:hover': { borderColor: ACCENT, bgcolor: accentBg },
                       }}
                     >
                       Summarize All ({emails.length})
@@ -242,7 +245,7 @@ export default function AINewsletter() {
               label={`📰 ${GMAIL_LABEL}`}
               size="small"
               sx={{ fontSize: '0.72rem', fontWeight: 600, borderRadius: 2,
-                bgcolor: ACCENT_BG, color: ACCENT, border: `1px solid ${ACCENT_BORDER}` }}
+                bgcolor: accentBg, color: ACCENT, border: `1px solid ${isDark ? 'rgba(8,145,178,0.3)' : ACCENT_BORDER}` }}
             />
           </Box>
 
@@ -269,7 +272,7 @@ export default function AINewsletter() {
                     <Box display="flex" flexWrap="wrap" gap={0.5}>
                       {availableMailboxes.map((mb) => (
                         <Chip key={mb} label={mb} size="small"
-                          sx={{ fontSize: '0.68rem', cursor: 'default', borderRadius: 1.5, bgcolor: '#f1f5f9' }} />
+                          sx={{ fontSize: '0.68rem', cursor: 'default', borderRadius: 1.5, bgcolor: isDark ? 'rgba(255,255,255,0.08)' : '#f1f5f9' }} />
                       ))}
                     </Box>
                   </Box>
@@ -297,10 +300,10 @@ export default function AINewsletter() {
                     px: 2.5, py: 1.75,
                     borderBottom: '1px solid #f1f5f9',
                     cursor: 'pointer',
-                    bgcolor: active ? ACCENT_BG : 'transparent',
+                    bgcolor: active ? accentBg : 'transparent',
                     borderLeft: active ? `3px solid ${ACCENT}` : '3px solid transparent',
                     transition: 'all 0.1s',
-                    '&:hover': { bgcolor: active ? ACCENT_BG : '#f8fafc' },
+                    '&:hover': { bgcolor: active ? accentBg : (isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc') },
                   }}
                 >
                   <Box display="flex" alignItems="center" justifyContent="space-between" mb={0.5}>
@@ -313,7 +316,7 @@ export default function AINewsletter() {
                     </Typography>
                   </Box>
                   <Typography variant="body2" fontWeight={active ? 700 : 600}
-                    sx={{ fontSize: '0.82rem', color: '#1e293b', mb: 0.4,
+                    sx={{ fontSize: '0.82rem', color: 'text.primary', mb: 0.4,
                       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {email.subject}
                   </Typography>
@@ -352,7 +355,7 @@ export default function AINewsletter() {
             <Box sx={{ flex: 1, overflowY: 'auto', p: { xs: 2, sm: 4 }, maxWidth: 820, mx: 'auto', width: '100%' }}>
               {/* Title + summarize button */}
               <Box display="flex" alignItems="flex-start" justifyContent="space-between" gap={2} mb={2}>
-                <Typography variant="h5" fontWeight={700} color="#1e293b" lineHeight={1.3} flex={1}>
+                <Typography variant="h5" fontWeight={700} color="text.primary" lineHeight={1.3} flex={1}>
                   {selected.subject}
                 </Typography>
                 <Tooltip title={summaryMap[selected.messageId] ? 'Refresh summary' : 'Summarize this newsletter with AI'}>
@@ -390,14 +393,14 @@ export default function AINewsletter() {
                   icon={<Email sx={{ fontSize: '14px !important' }} />}
                   label={selected.from}
                   size="small"
-                  sx={{ bgcolor: ACCENT_BG, color: ACCENT_DARK, borderRadius: 2, fontWeight: 600, fontSize: '0.75rem' }}
+                  sx={{ bgcolor: accentBg, color: ACCENT_DARK, borderRadius: 2, fontWeight: 600, fontSize: '0.75rem' }}
                 />
                 {selected.date && (
                   <Chip
                     icon={<CalendarMonth sx={{ fontSize: '14px !important' }} />}
                     label={formatDate(selected.date)}
                     size="small"
-                    sx={{ bgcolor: '#f0fdf4', color: '#166534', borderRadius: 2, fontSize: '0.75rem' }}
+                    sx={{ bgcolor: isDark ? 'rgba(16,185,129,0.12)' : '#f0fdf4', color: isDark ? '#34d399' : '#166534', borderRadius: 2, fontSize: '0.75rem' }}
                   />
                 )}
               </Box>
@@ -412,8 +415,8 @@ export default function AINewsletter() {
               {/* Inline summary */}
               {summaryMap[selected.messageId] && (
                 <Box sx={{ mb: 3, p: 2.5, borderRadius: 2.5,
-                  background: 'linear-gradient(135deg, #ecfeff 0%, #cffafe 100%)',
-                  border: `1px solid ${ACCENT_BORDER}` }}>
+                  background: isDark ? `linear-gradient(135deg, rgba(8,145,178,0.12) 0%, rgba(6,182,212,0.08) 100%)` : 'linear-gradient(135deg, #ecfeff 0%, #cffafe 100%)',
+                  border: `1px solid ${isDark ? 'rgba(8,145,178,0.3)' : ACCENT_BORDER}` }}>
                   <Box display="flex" alignItems="center" justifyContent="space-between" mb={1.5}>
                     <Box display="flex" alignItems="center" gap={1}>
                       <AutoAwesome sx={{ fontSize: 15, color: ACCENT }} />

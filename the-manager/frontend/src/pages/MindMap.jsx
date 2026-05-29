@@ -37,6 +37,7 @@ import {
   Alert,
   Menu as MuiMenu,
   MenuItem as MuiMenuItem,
+  useTheme,
 } from '@mui/material';
 import { Add, List as ListIcon, Refresh, Label, PersonAdd, Download, SelectAll, CropFree, AutoFixHigh, Fullscreen, FullscreenExit, ChevronLeft, ChevronRight, FormatListBulleted, Search as SearchIcon } from '@mui/icons-material';
 import api from '../api/axios';
@@ -142,6 +143,8 @@ function getDescendants(id, childrenOf) {
 const savedViewports = {};
 
 function MindMapInner() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { allItems, allItemsLoading } = useSelector(state => state.initiatives);
@@ -761,9 +764,9 @@ function MindMapInner() {
             minZoom={0.08}
             maxZoom={2}
             defaultEdgeOptions={{ type: 'smoothstep' }}
-            style={{ background: '#f5f6fa' }}
+            style={{ background: isDark ? '#0f172a' : '#f5f6fa' }}
           >
-            <Background variant="dots" color="#c7d2fe" gap={28} size={1.5} />
+            <Background variant="dots" color={isDark ? '#334155' : '#c7d2fe'} gap={28} size={1.5} />
             <Controls
               style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.1)', borderRadius: 10, border: '1px solid #e2e8f0', overflow: 'hidden' }}
             />
@@ -781,11 +784,11 @@ function MindMapInner() {
                     onClick={() => setLeftPanelOpen(v => !v)}
                     size="small"
                     sx={{
-                      bgcolor: leftPanelOpen ? '#6366f1' : 'white',
+                      bgcolor: leftPanelOpen ? '#6366f1' : (isDark ? 'background.paper' : 'white'),
                       color: leftPanelOpen ? 'white' : 'text.secondary',
                       boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-                      border: '1px solid #e2e8f0',
-                      '&:hover': { bgcolor: leftPanelOpen ? '#4f46e5' : '#f5f5f5' },
+                      border: `1px solid ${theme.palette.divider}`,
+                      '&:hover': { bgcolor: leftPanelOpen ? '#4f46e5' : (isDark ? 'rgba(255,255,255,0.08)' : '#f5f5f5') },
                     }}
                   >
                     <FormatListBulleted fontSize="small" />
@@ -800,7 +803,7 @@ function MindMapInner() {
                       setCreateDialogOpen(true);
                     }}
                     size="small"
-                    sx={{ bgcolor: 'white', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', border: '1px solid #e2e8f0', '&:hover': { bgcolor: '#f5f5f5' } }}
+                    sx={{ bgcolor: isDark ? 'background.paper' : 'white', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', border: `1px solid ${theme.palette.divider}`, '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.08)' : '#f5f5f5' } }}
                   >
                     <Add fontSize="small" />
                   </IconButton>
@@ -812,7 +815,7 @@ function MindMapInner() {
             <Panel position="top-right">
               <Box
                 display="flex" gap={0.75} alignItems="center"
-                sx={{ bgcolor: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)', border: '1px solid #e2e8f0', borderRadius: 2.5, px: 1, py: 0.75, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}
+                sx={{ bgcolor: isDark ? 'rgba(30,41,59,0.92)' : 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)', border: `1px solid ${theme.palette.divider}`, borderRadius: 2.5, px: 1, py: 0.75, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}
               >
                 <Chip
                   label={showCompleted ? 'Showing all' : 'Active only'}
@@ -882,7 +885,7 @@ function MindMapInner() {
 
             {/* Bottom hint */}
             <Panel position="bottom-center">
-              <Box sx={{ bgcolor: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(6px)', border: '1px solid #e2e8f0', borderRadius: 6, px: 1.75, py: 0.5 }}>
+              <Box sx={{ bgcolor: isDark ? 'rgba(30,41,59,0.88)' : 'rgba(255,255,255,0.88)', backdropFilter: 'blur(6px)', border: `1px solid ${theme.palette.divider}`, borderRadius: 6, px: 1.75, py: 0.5 }}>
                 <Typography variant="caption" color="text.disabled">Drag to pan · scroll to zoom · double-click to open</Typography>
               </Box>
             </Panel>
@@ -891,7 +894,7 @@ function MindMapInner() {
             <Panel position="bottom-left">
               <Box
                 display="flex" gap={1} flexWrap="wrap" alignItems="center"
-                sx={{ bgcolor: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(6px)', border: '1px solid #e2e8f0', borderRadius: 2, px: 1.5, py: 0.75, maxWidth: 420 }}
+                sx={{ bgcolor: isDark ? 'rgba(30,41,59,0.88)' : 'rgba(255,255,255,0.88)', backdropFilter: 'blur(6px)', border: `1px solid ${theme.palette.divider}`, borderRadius: 2, px: 1.5, py: 0.75, maxWidth: 420 }}
               >
                 {Object.entries(STATUS_CONFIG).map(([status, cfg]) => (
                   <Box key={status} display="flex" alignItems="center" gap={0.5}>
@@ -929,7 +932,7 @@ function MindMapInner() {
               position: 'absolute', top: 0, left: 0, bottom: 0, width: 290, zIndex: 20,
               bgcolor: 'background.paper', boxShadow: '4px 0 24px rgba(0,0,0,0.15)',
               display: 'flex', flexDirection: 'column', overflow: 'hidden',
-              borderRight: '1px solid #e2e8f0',
+              borderRight: `1px solid ${theme.palette.divider}`,
             }}
           >
             {/* Panel header */}
@@ -962,8 +965,8 @@ function MindMapInner() {
               sx={{
                 px: 2, py: 1.5, cursor: 'pointer',
                 borderLeft: selectedRootId === null ? '3px solid #6366f1' : '3px solid transparent',
-                bgcolor: selectedRootId === null ? '#f5f3ff' : 'transparent',
-                '&:hover': { bgcolor: selectedRootId === null ? '#f5f3ff' : '#f8fafc' },
+                bgcolor: selectedRootId === null ? (isDark ? 'rgba(99,102,241,0.15)' : '#f5f3ff') : 'transparent',
+                '&:hover': { bgcolor: selectedRootId === null ? (isDark ? 'rgba(99,102,241,0.15)' : '#f5f3ff') : (isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc') },
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               }}
             >
@@ -991,9 +994,9 @@ function MindMapInner() {
                     sx={{
                       px: 2, py: 1.25, cursor: 'pointer',
                       borderLeft: isActive ? '3px solid #6366f1' : '3px solid transparent',
-                      bgcolor: isActive ? '#f5f3ff' : 'transparent',
-                      borderBottom: '1px solid #f1f5f9',
-                      '&:hover': { bgcolor: isActive ? '#f5f3ff' : '#f8fafc' },
+                      bgcolor: isActive ? (isDark ? 'rgba(99,102,241,0.15)' : '#f5f3ff') : 'transparent',
+                      borderBottom: `1px solid ${theme.palette.divider}`,
+                      '&:hover': { bgcolor: isActive ? (isDark ? 'rgba(99,102,241,0.15)' : '#f5f3ff') : (isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc') },
                       display: 'flex', alignItems: 'flex-start', gap: 1,
                     }}
                   >

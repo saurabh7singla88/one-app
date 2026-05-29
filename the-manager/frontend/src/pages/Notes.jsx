@@ -4,7 +4,7 @@ import {
   Box, Typography, Button, IconButton, TextField, Chip,
   CircularProgress, Divider, Tooltip, InputAdornment,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  Menu, MenuItem,
+  Menu, MenuItem, useTheme,
 } from '@mui/material';
 import {
   Add, Delete, Lock, LockOpen, LockOutlined, Search, Clear,
@@ -151,6 +151,8 @@ function PasswordMgmtDialog({ open, hasPassword, onClose, onSuccess }) {
 
 // ── Unlock screen ─────────────────────────────────────────────────────────────
 function UnlockScreen({ onUnlocked, encryptionEnabled }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [pw, setPw] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -175,9 +177,9 @@ function UnlockScreen({ onUnlocked, encryptionEnabled }) {
       <Typography variant="body2" color="text.disabled">Enter your password to unlock</Typography>
       {encryptionEnabled && (
         <Box display="flex" alignItems="center" gap={0.75} px={1.5} py={0.75}
-          sx={{ bgcolor: '#f0f4ff', borderRadius: 1.5, border: '1px solid #e0e7ff' }}>
+          sx={{ bgcolor: isDark ? 'rgba(99,102,241,0.12)' : '#f0f4ff', borderRadius: 1.5, border: `1px solid ${isDark ? 'rgba(99,102,241,0.3)' : '#e0e7ff'}` }}>
           <EnhancedEncryption sx={{ fontSize: 15, color: '#6366f1', flexShrink: 0 }} />
-          <Typography variant="caption" sx={{ color: '#4f46e5' }}>Protected notes are AES-256-GCM encrypted at rest</Typography>
+          <Typography variant="caption" sx={{ color: isDark ? '#818cf8' : '#4f46e5' }}>Protected notes are AES-256-GCM encrypted at rest</Typography>
         </Box>
       )}
       <Box display="flex" flexDirection="column" alignItems="center" gap={1.5} width={280}>
@@ -199,6 +201,8 @@ function UnlockScreen({ onUnlocked, encryptionEnabled }) {
 }
 // ── Per-note unlock dialog ──────────────────────────────────────────────
 function NoteUnlockDialog({ note, open, onClose, onUnlocked, encryptionEnabled }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [pw, setPw] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -232,7 +236,7 @@ function NoteUnlockDialog({ note, open, onClose, onUnlocked, encryptionEnabled }
         </Typography>
         {encryptionEnabled && (
           <Box display="flex" alignItems="center" gap={0.75} mb={2} px={1.25} py={0.75}
-            sx={{ bgcolor: '#f0f4ff', borderRadius: 1.5, border: '1px solid #e0e7ff' }}>
+            sx={{ bgcolor: isDark ? 'rgba(99,102,241,0.12)' : '#f0f4ff', borderRadius: 1.5, border: `1px solid ${isDark ? 'rgba(99,102,241,0.3)' : '#e0e7ff'}` }}>
             <EnhancedEncryption sx={{ fontSize: 15, color: '#6366f1', flexShrink: 0 }} />
             <Typography variant="caption" sx={{ color: '#4f46e5', lineHeight: 1.4 }}>
               Content is AES-256-GCM encrypted at rest
@@ -259,6 +263,8 @@ function NoteUnlockDialog({ note, open, onClose, onUnlocked, encryptionEnabled }
 }
 // ── NoteTreeItem — renders one node and its children recursively ───────────────
 function NoteTreeItem({ note, depth, selectedId, onSelect, onAddChild, expandedIds, onToggle, canvases, onAssignCanvas }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const isExpanded = expandedIds.has(note.id);
   const hasChildren = note.children?.length > 0;
   const active = selectedId === note.id;
@@ -275,9 +281,9 @@ function NoteTreeItem({ note, depth, selectedId, onSelect, onAddChild, expandedI
           py: 0.85, cursor: 'pointer',
           borderLeft: '3px solid',
           borderLeftColor: active ? '#6366f1' : 'transparent',
-          bgcolor: active ? '#f5f3ff' : 'transparent',
+          bgcolor: active ? (isDark ? 'rgba(99,102,241,0.15)' : '#f5f3ff') : 'transparent',
           borderBottom: '1px solid #f1f5f9',
-          '&:hover': { bgcolor: active ? '#f5f3ff' : '#f8fafc' },
+          '&:hover': { bgcolor: active ? (isDark ? 'rgba(99,102,241,0.15)' : '#f5f3ff') : (isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc') },
           '&:hover .note-add-btn': { opacity: 1 },
         }}
       >
@@ -378,6 +384,8 @@ function NoteTreeItem({ note, depth, selectedId, onSelect, onAddChild, expandedI
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function Notes() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const dispatch = useDispatch();
   const { activeCanvasId, canvases } = useSelector(s => ({
     activeCanvasId: s.canvas.activeCanvasId.notes,
@@ -702,9 +710,9 @@ export default function Notes() {
                       sx={{
                         px: 2, py: 1.5, cursor: 'pointer', borderLeft: '3px solid',
                         borderLeftColor: active ? '#6366f1' : 'transparent',
-                        bgcolor: active ? '#f5f3ff' : 'transparent',
+                        bgcolor: active ? (isDark ? 'rgba(99,102,241,0.15)' : '#f5f3ff') : 'transparent',
                         borderBottom: '1px solid #f1f5f9',
-                        '&:hover': { bgcolor: active ? '#f5f3ff' : '#f8fafc' },
+                        '&:hover': { bgcolor: active ? (isDark ? 'rgba(99,102,241,0.15)' : '#f5f3ff') : (isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc') },
                       }}>
                       <Typography variant="body2" fontWeight={600}
                         sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: active ? '#4f46e5' : 'text.primary' }}>
@@ -761,7 +769,7 @@ export default function Notes() {
           ) : (
             <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               {/* Toolbar */}
-              <Box sx={{ px: 3, py: 1.5, borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#fafafa' }}>
+              <Box sx={{ px: 3, py: 1.5, borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 1, bgcolor: isDark ? 'background.paper' : '#fafafa' }}>
                 <Box display="flex" alignItems="center" gap={0.75} sx={{ flex: 1 }}>
                   {saveState === 'saving' && <><CircularProgress size={12} /><Typography variant="caption" color="text.disabled">Saving…</Typography></>}
                   {saveState === 'saved'  && <><CheckCircle sx={{ fontSize: 14, color: '#22c55e' }} /><Typography variant="caption" color="text.disabled">Saved</Typography></>}
@@ -778,7 +786,7 @@ export default function Notes() {
                         sx={{
                           color: assignedCanvas ? assignedCanvas.color : 'text.disabled',
                           bgcolor: assignedCanvas ? assignedCanvas.color + '18' : 'transparent',
-                          '&:hover': { bgcolor: assignedCanvas ? assignedCanvas.color + '30' : '#f0f4ff', color: assignedCanvas ? assignedCanvas.color : '#6366f1' },
+                          '&:hover': { bgcolor: assignedCanvas ? assignedCanvas.color + '30' : (isDark ? 'rgba(99,102,241,0.12)' : '#f0f4ff'), color: assignedCanvas ? assignedCanvas.color : '#6366f1' },
                           borderRadius: 1.5,
                         }}
                       >
@@ -789,7 +797,7 @@ export default function Notes() {
                 })()}
                 <Tooltip title={editorNote.isProtected ? (encryptionEnabled ? 'Protected — content AES-256 encrypted at rest. Click to remove.' : 'Protected. Click to remove.') : 'Lock note (uses login password)'}>
                   <IconButton size="small" onClick={handleToggleLock}
-                    sx={{ color: editorNote.isProtected ? '#6366f1' : 'text.disabled', '&:hover': { color: '#6366f1', bgcolor: '#f0f4ff' }, borderRadius: 1.5 }}>
+                    sx={{ color: editorNote.isProtected ? '#6366f1' : 'text.disabled', '&:hover': { color: '#6366f1', bgcolor: isDark ? 'rgba(99,102,241,0.12)' : '#f0f4ff' }, borderRadius: 1.5 }}>
                     {editorNote.isProtected ? <Lock sx={{ fontSize: 17 }} /> : <LockOpen sx={{ fontSize: 17 }} />}
                   </IconButton>
                 </Tooltip>
@@ -799,7 +807,7 @@ export default function Notes() {
                       icon={<EnhancedEncryption sx={{ fontSize: '13px !important' }} />}
                       label="Encrypted"
                       size="small"
-                      sx={{ height: 20, fontSize: '0.65rem', bgcolor: '#f0f4ff', color: '#4f46e5', border: '1px solid #c7d2fe', cursor: 'default',
+                      sx={{ height: 20, fontSize: '0.65rem', bgcolor: isDark ? 'rgba(99,102,241,0.12)' : '#f0f4ff', color: isDark ? '#818cf8' : '#4f46e5', border: `1px solid ${isDark ? 'rgba(99,102,241,0.3)' : '#c7d2fe'}`, cursor: 'default',
                         '& .MuiChip-icon': { color: '#6366f1', ml: '6px' },
                         '& .MuiChip-label': { px: '6px' },
                       }}
@@ -807,7 +815,7 @@ export default function Notes() {
                   </Tooltip>
                 )}
                 <Tooltip title="Delete note (and all children)">
-                  <IconButton size="small" onClick={() => setDeleteConfirm(true)} sx={{ color: 'text.disabled', '&:hover': { color: '#dc2626', bgcolor: '#fef2f2' }, borderRadius: 1.5 }}>
+                  <IconButton size="small" onClick={() => setDeleteConfirm(true)} sx={{ color: 'text.disabled', '&:hover': { color: '#dc2626', bgcolor: isDark ? 'rgba(220,38,38,0.15)' : '#fef2f2' }, borderRadius: 1.5 }}>
                     <Delete sx={{ fontSize: 17 }} />
                   </IconButton>
                 </Tooltip>

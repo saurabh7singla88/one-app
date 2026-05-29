@@ -1,8 +1,13 @@
 import { createTheme, alpha } from '@mui/material/styles';
 
-const theme = createTheme({
+export function createAppTheme(mode) {
+  const isDark = mode === 'dark';
+  const borderColor = isDark ? '#334155' : '#e2e8f0';
+  const borderHover = isDark ? '#64748b' : '#94a3b8';
+
+  return createTheme({
   palette: {
-    mode: 'light',
+    mode,
     primary: {
       main: '#6366f1',
       light: '#818cf8',
@@ -35,15 +40,15 @@ const theme = createTheme({
       dark: '#2563eb',
     },
     background: {
-      default: '#f8fafc',
-      paper: '#ffffff',
+      default: isDark ? '#0f172a' : '#f8fafc',
+      paper: isDark ? '#1e293b' : '#ffffff',
     },
     text: {
-      primary: '#0f172a',
-      secondary: '#64748b',
-      disabled: '#94a3b8',
+      primary: isDark ? '#f1f5f9' : '#0f172a',
+      secondary: isDark ? '#94a3b8' : '#64748b',
+      disabled: isDark ? '#475569' : '#94a3b8',
     },
-    divider: '#e2e8f0',
+    divider: borderColor,
   },
   typography: {
     fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
@@ -97,8 +102,8 @@ const theme = createTheme({
         html: { WebkitFontSmoothing: 'antialiased', MozOsxFontSmoothing: 'grayscale' },
         '::-webkit-scrollbar': { width: 6, height: 6 },
         '::-webkit-scrollbar-track': { background: 'transparent' },
-        '::-webkit-scrollbar-thumb': { background: '#cbd5e1', borderRadius: 4 },
-        '::-webkit-scrollbar-thumb:hover': { background: '#94a3b8' },
+        '::-webkit-scrollbar-thumb': { background: isDark ? '#475569' : '#cbd5e1', borderRadius: 4 },
+        '::-webkit-scrollbar-thumb:hover': { background: isDark ? '#64748b' : '#94a3b8' },
       },
     },
     MuiButton: {
@@ -122,8 +127,8 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: 12,
-          border: '1px solid #e2e8f0',
-          boxShadow: '0 1px 4px rgba(15,23,42,0.06)',
+          border: `1px solid ${borderColor}`,
+          boxShadow: isDark ? '0 1px 4px rgba(0,0,0,0.3)' : '0 1px 4px rgba(15,23,42,0.06)',
           transition: 'box-shadow 0.2s ease, transform 0.2s ease',
         },
       },
@@ -132,8 +137,8 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: 8,
-          '& fieldset': { borderColor: '#e2e8f0' },
-          '&:hover fieldset': { borderColor: '#94a3b8' },
+          '& fieldset': { borderColor },
+          '&:hover fieldset': { borderColor: borderHover },
           '&.Mui-focused fieldset': { borderColor: '#6366f1' },
         },
       },
@@ -153,7 +158,7 @@ const theme = createTheme({
       styleOverrides: { root: { borderRadius: 8 } },
     },
     MuiLinearProgress: {
-      styleOverrides: { root: { borderRadius: 4, backgroundColor: '#e2e8f0' } },
+      styleOverrides: { root: { borderRadius: 4, backgroundColor: borderColor } },
     },
     MuiAlert: {
       styleOverrides: { root: { borderRadius: 8 } },
@@ -187,7 +192,7 @@ const theme = createTheme({
       styleOverrides: { root: { minWidth: 36 } },
     },
     MuiDivider: {
-      styleOverrides: { root: { borderColor: '#e2e8f0' } },
+      styleOverrides: { root: { borderColor } },
     },
     MuiTooltip: {
       styleOverrides: {
@@ -200,6 +205,5 @@ const theme = createTheme({
       },
     },
   },
-});
-
-export default theme;
+  });
+}

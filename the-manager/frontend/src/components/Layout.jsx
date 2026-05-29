@@ -10,11 +10,13 @@ import {
   NoteAlt, EventNote, FeedOutlined, Groups,
   Settings as SettingsIcon, ChevronLeft, ChevronRight, HelpOutline,
   Bookmark as BookmarkIcon, CalendarMonth as PlannerIcon,
+  DarkMode, LightMode,
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { logout } from '../features/auth/authSlice';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useContext } from 'react';
+import { ColorModeContext } from '../colorModeContext';
 import api from '../api/axios';
 
 const EXPANDED_WIDTH = 220;
@@ -30,6 +32,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useSelector((state) => state.auth);
+  const { mode, toggleColorMode } = useContext(ColorModeContext);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // ── Feature flags (from Setup → Features toggles) ──────────────────────
@@ -185,7 +188,22 @@ export default function Layout() {
 
       <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)', mx: collapsed ? 1 : 2 }} />
 
-      <Box sx={{ display: 'flex', justifyContent: collapsed ? 'center' : 'flex-end', px: 1, py: 0.75 }}>
+      <Box sx={{ display: 'flex', justifyContent: collapsed ? 'center' : 'space-between', px: 1, py: 0.75, gap: 0.5 }}>
+        <Tooltip title={mode === 'dark' ? 'Light mode' : 'Dark mode'} placement="right" arrow>
+          <IconButton
+            size="small"
+            onClick={toggleColorMode}
+            sx={{
+              color: SIDEBAR_TEXT,
+              bgcolor: 'rgba(255,255,255,0.05)',
+              borderRadius: 1.5,
+              p: 0.6,
+              '&:hover': { bgcolor: 'rgba(255,255,255,0.12)', color: '#ffffff' },
+            }}
+          >
+            {mode === 'dark' ? <LightMode sx={{ fontSize: 17 }} /> : <DarkMode sx={{ fontSize: 17 }} />}
+          </IconButton>
+        </Tooltip>
         <Tooltip title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} placement="right" arrow>
           <IconButton
             size="small"

@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux';
 import {
   Box, Typography, IconButton, Chip, CircularProgress,
   Divider, Tooltip, TextField, InputAdornment, Alert,
-  Button, Dialog, DialogTitle, DialogContent, DialogActions, Autocomplete,
+  Button, Dialog, DialogTitle, DialogContent, DialogActions, Autocomplete, useTheme,
 } from '@mui/material';
 import {
   Refresh, Email, EventNote, CalendarMonth, InboxOutlined,
@@ -46,7 +46,7 @@ function renderEmailBody(text) {
     <Typography
       key={i}
       variant="body2"
-      sx={{ mb: 1.5, lineHeight: 1.75, color: '#374151', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+      sx={{ mb: 1.5, lineHeight: 1.75, color: 'text.primary', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
     >
       {para.trim()}
     </Typography>
@@ -60,6 +60,8 @@ const PROVIDER_LABEL = {
 };
 
 function ActionItemsPanel({ data, userName }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const { items = [], provider, llmCalled, llmFailed, emptyBody } = data;
   const forMe  = items.filter(i => i.isForMe);
   const others = items.filter(i => !i.isForMe);
@@ -96,7 +98,7 @@ function ActionItemsPanel({ data, userName }) {
     }
     return (
       <Box
-        sx={{ bgcolor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 2, px: 2.5, py: 2, mb: 3 }}
+        sx={{ bgcolor: isDark ? 'rgba(255,255,255,0.04)' : '#f8fafc', border: `1px solid ${theme.palette.divider}`, borderRadius: 2, px: 2.5, py: 2, mb: 3 }}
       >
         <Typography variant="body2" color={color} fontStyle="italic">
           {msg}
@@ -108,7 +110,7 @@ function ActionItemsPanel({ data, userName }) {
   return (
     <Box
       sx={{
-        bgcolor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 2.5,
+        bgcolor: isDark ? 'rgba(255,255,255,0.04)' : '#f8fafc', border: `1px solid ${theme.palette.divider}`, borderRadius: 2.5,
         overflow: 'hidden', mb: 3,
       }}
     >
@@ -174,13 +176,13 @@ function ActionItemsPanel({ data, userName }) {
                 key={i}
                 sx={{
                   display: 'flex', alignItems: 'flex-start', gap: 1.25,
-                  bgcolor: '#faf5ff', border: '1px solid #e9d5ff',
+                  bgcolor: isDark ? 'rgba(124,58,237,0.12)' : '#faf5ff', border: `1px solid ${isDark ? 'rgba(124,58,237,0.3)' : '#e9d5ff'}`,
                   borderRadius: 2, px: 1.75, py: 1.25, mb: 0.75,
                 }}
               >
                 <CheckCircle sx={{ fontSize: 15, color: '#7c3aed', mt: '2px', flexShrink: 0 }} />
                 <Box flex={1}>
-                  <Typography variant="body2" fontWeight={600} fontSize="0.85rem" color="#3b0764" lineHeight={1.5}>
+                  <Typography variant="body2" fontWeight={600} fontSize="0.85rem" color={isDark ? '#c4b5fd' : '#3b0764'} lineHeight={1.5}>
                     {item.text}
                   </Typography>
                   {item.assignee && (
@@ -209,7 +211,7 @@ function ActionItemsPanel({ data, userName }) {
                 sx={{
                   display: 'flex', alignItems: 'flex-start', gap: 1.25,
                   borderRadius: 2, px: 1.75, py: 1, mb: 0.5,
-                  bgcolor: '#f8fafc', border: '1px solid #e2e8f0',
+                  bgcolor: isDark ? 'rgba(255,255,255,0.04)' : '#f8fafc', border: `1px solid ${theme.palette.divider}`,
                 }}
               >
                 <Box
@@ -219,7 +221,7 @@ function ActionItemsPanel({ data, userName }) {
                   }}
                 />
                 <Box flex={1}>
-                  <Typography variant="body2" fontSize="0.84rem" color="#334155" lineHeight={1.5}>
+                  <Typography variant="body2" fontSize="0.84rem" color="text.primary" lineHeight={1.5}>
                     {item.text}
                   </Typography>
                   {item.assignee && (
@@ -239,6 +241,8 @@ function ActionItemsPanel({ data, userName }) {
 
 // ── main page ─────────────────────────────────────────────────────────────────
 export default function MeetingNotes() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const today = format(new Date(), 'yyyy-MM-dd');
   const { user } = useSelector((s) => s.auth);
   const [date, setDate]           = useState(today);
@@ -364,7 +368,7 @@ export default function MeetingNotes() {
   };
 
   // ── layout ───────────────────────────────────────────────────────────────────
-  return (    <>    <Box display="flex" height="100vh" overflow="hidden" bgcolor="#f8fafc">
+  return (    <>    <Box display="flex" height="100vh" overflow="hidden" bgcolor={isDark ? 'background.default' : '#f8fafc'}>
 
       {/* ── Left panel ─────────────────────────────────────────────────────── */}
       <Box
@@ -373,8 +377,8 @@ export default function MeetingNotes() {
           flexShrink: 0,
           display: 'flex',
           flexDirection: 'column',
-          borderRight: '1px solid #e2e8f0',
-          bgcolor: '#ffffff',
+          borderRight: `1px solid ${theme.palette.divider}`,
+          bgcolor: 'background.paper',
         }}
       >
         {/* Header */}
@@ -434,10 +438,10 @@ export default function MeetingNotes() {
                     fontWeight: 600,
                     borderRadius: 2,
                     cursor: 'pointer',
-                    bgcolor: label === pl.label ? '#6366f1' : '#f1f5f9',
-                    color:   label === pl.label ? '#fff'     : '#475569',
-                    border:  label === pl.label ? 'none'     : '1px solid #e2e8f0',
-                    '&:hover': { bgcolor: label === pl.label ? '#4f46e5' : '#e2e8f0' },
+                    bgcolor: label === pl.label ? '#6366f1' : (isDark ? 'rgba(255,255,255,0.08)' : '#f1f5f9'),
+                    color:   label === pl.label ? '#fff'     : (isDark ? 'text.primary' : '#475569'),
+                    border:  label === pl.label ? 'none'     : `1px solid ${theme.palette.divider}`,
+                    '&:hover': { bgcolor: label === pl.label ? '#4f46e5' : (isDark ? 'rgba(255,255,255,0.13)' : '#e2e8f0') },
                   }}
                 />
               ))}
@@ -507,7 +511,7 @@ export default function MeetingNotes() {
                         size="small"
                         onClick={() => setLabel(mb)}
                         sx={{ fontSize: '0.68rem', cursor: 'pointer', borderRadius: 1.5,
-                          bgcolor: '#f1f5f9', '&:hover': { bgcolor: '#e0e7ff' } }}
+                          bgcolor: isDark ? 'rgba(255,255,255,0.08)' : '#f1f5f9', '&:hover': { bgcolor: isDark ? 'rgba(99,102,241,0.15)' : '#e0e7ff' } }}
                       />
                     ))}
                   </Box>
@@ -536,10 +540,10 @@ export default function MeetingNotes() {
                   px: 2.5, py: 1.75,
                   borderBottom: '1px solid #f1f5f9',
                   cursor: 'pointer',
-                  bgcolor: active ? '#f0f0ff' : 'transparent',
+                  bgcolor: active ? (isDark ? 'rgba(99,102,241,0.12)' : '#f0f0ff') : 'transparent',
                   borderLeft: active ? '3px solid #6366f1' : '3px solid transparent',
                   transition: 'all 0.1s',
-                  '&:hover': { bgcolor: active ? '#f0f0ff' : '#f8fafc' },
+                  '&:hover': { bgcolor: active ? (isDark ? 'rgba(99,102,241,0.12)' : '#f0f0ff') : (isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc') },
                 }}
               >
                 {/* From */}
@@ -569,7 +573,7 @@ export default function MeetingNotes() {
                   fontWeight={active ? 700 : 600}
                   sx={{
                     fontSize: '0.82rem',
-                    color: '#1e293b',
+                    color: 'text.primary',
                     mb: 0.4,
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
@@ -617,14 +621,14 @@ export default function MeetingNotes() {
           <Box sx={{
             mx: 3, mt: 2.5, mb: 0,
             p: 2, borderRadius: 2.5,
-            bgcolor: '#eff6ff',
-            border: '1px solid #bfdbfe',
+            bgcolor: isDark ? 'rgba(29,78,216,0.12)' : '#eff6ff',
+            border: `1px solid ${isDark ? 'rgba(29,78,216,0.3)' : '#bfdbfe'}`,
             display: 'flex', alignItems: 'flex-start', gap: 1.5,
             flexShrink: 0,
           }}>
             <Box sx={{ fontSize: '1.3rem', lineHeight: 1, flexShrink: 0, mt: 0.1 }}>📬</Box>
             <Box flex={1}>
-              <Typography fontWeight={700} sx={{ fontSize: '0.9rem', color: '#1d4ed8', mb: 0.4 }}>
+              <Typography fontWeight={700} sx={{ fontSize: '0.9rem', color: isDark ? '#93c5fd' : '#1d4ed8', mb: 0.4 }}>
                 Setting up Meeting Notes
               </Typography>
               <Typography sx={{ fontSize: '0.8rem', color: '#3b82f6', lineHeight: 1.6 }}>
@@ -662,7 +666,7 @@ export default function MeetingNotes() {
           <Box sx={{ flex: 1, overflowY: 'auto', p: { xs: 2, sm: 4 }, maxWidth: 820, mx: 'auto', width: '100%' }}>
             {/* Subject + action-items button */}
             <Box display="flex" alignItems="flex-start" justifyContent="space-between" gap={2} mb={2}>
-              <Typography variant="h5" fontWeight={700} color="#1e293b" lineHeight={1.3} flex={1}>
+              <Typography variant="h5" fontWeight={700} color="text.primary" lineHeight={1.3} flex={1}>
                 {selected.subject}
               </Typography>
               <Tooltip title={actionItemsMap[selected.messageId] ? 'Refresh action items' : 'Extract action items with AI'}>
@@ -715,14 +719,14 @@ export default function MeetingNotes() {
                 icon={<Email sx={{ fontSize: '14px !important' }} />}
                 label={selected.from}
                 size="small"
-                sx={{ bgcolor: '#f0f0ff', color: '#4338ca', borderRadius: 2, fontWeight: 600, fontSize: '0.75rem' }}
+                sx={{ bgcolor: isDark ? 'rgba(99,102,241,0.12)' : '#f0f0ff', color: isDark ? '#818cf8' : '#4338ca', borderRadius: 2, fontWeight: 600, fontSize: '0.75rem' }}
               />
               {selected.date && (
                 <Chip
                   icon={<CalendarMonth sx={{ fontSize: '14px !important' }} />}
                   label={formatDate(selected.date)}
                   size="small"
-                  sx={{ bgcolor: '#f0fdf4', color: '#166534', borderRadius: 2, fontSize: '0.75rem' }}
+                  sx={{ bgcolor: isDark ? 'rgba(16,185,129,0.12)' : '#f0fdf4', color: isDark ? '#34d399' : '#166534', borderRadius: 2, fontSize: '0.75rem' }}
                 />
               )}
               <Box sx={{ ml: 'auto' }}>
@@ -732,7 +736,7 @@ export default function MeetingNotes() {
                       icon={<Bookmark sx={{ fontSize: '14px !important', color: '#059669 !important' }} />}
                       label={savedNotesMap[selected.messageId].initiative?.title || 'Saved (no initiative)'}
                       size="small"
-                      sx={{ bgcolor: '#ecfdf5', color: '#065f46', borderRadius: 2, fontWeight: 600, fontSize: '0.75rem', border: '1px solid #a7f3d0' }}
+                      sx={{ bgcolor: isDark ? 'rgba(5,150,105,0.15)' : '#ecfdf5', color: isDark ? '#34d399' : '#065f46', borderRadius: 2, fontWeight: 600, fontSize: '0.75rem', border: `1px solid ${isDark ? 'rgba(5,150,105,0.3)' : '#a7f3d0'}` }}
                     />
                     <Tooltip title="Change initiative link">
                       <IconButton size="small" onClick={openSaveDialog} sx={{ color: '#94a3b8', '&:hover': { color: '#6366f1' } }}>

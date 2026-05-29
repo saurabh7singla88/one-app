@@ -10,6 +10,7 @@
  *   sx          – extra Box sx for the outer container
  */
 import { useState, useEffect, useCallback } from 'react';
+import { useTheme } from '@mui/material/styles';
 import {
   Box, Typography, Chip, IconButton, Skeleton, Tooltip, Button,
 } from '@mui/material';
@@ -21,17 +22,17 @@ import AISettingsDialog from './AISettingsDialog';
 const _cache = new Map(); // key: `${mode}:${canvasId ?? 'all'}` → data object
 
 const PROVIDER_BADGE = {
-  ollama:            { label: '🦙 Ollama',   color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' },
-  openai:            { label: '✨ OpenAI',    color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe' },
-  openai_compatible: { label: '🔌 Custom AI', color: '#6b21a8', bg: '#faf5ff', border: '#e9d5ff' },
-  gemini:            { label: '♊ Gemini',    color: '#b45309', bg: '#fffbeb', border: '#fde68a' },
+  ollama:            { label: '🦙 Ollama',   color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0', darkColor: '#4ade80', darkBg: 'rgba(21,128,61,0.15)',   darkBorder: 'rgba(21,128,61,0.3)'   },
+  openai:            { label: '✨ OpenAI',    color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe', darkColor: '#60a5fa', darkBg: 'rgba(59,130,246,0.15)',  darkBorder: 'rgba(59,130,246,0.3)'  },
+  openai_compatible: { label: '🔌 Custom AI', color: '#6b21a8', bg: '#faf5ff', border: '#e9d5ff', darkColor: '#c084fc', darkBg: 'rgba(168,85,247,0.15)',  darkBorder: 'rgba(168,85,247,0.3)'  },
+  gemini:            { label: '♊ Gemini',    color: '#b45309', bg: '#fffbeb', border: '#fde68a', darkColor: '#fbbf24', darkBg: 'rgba(251,191,36,0.15)',  darkBorder: 'rgba(251,191,36,0.3)'  },
 };
 
 const STATUS_CHIP = {
-  OPEN:        { label: 'Open',        color: '#64748b', bg: '#f1f5f9' },
-  IN_PROGRESS: { label: 'In Progress', color: '#2563eb', bg: '#eff6ff' },
-  BLOCKED:     { label: 'Blocked',     color: '#dc2626', bg: '#fef2f2' },
-  ON_HOLD:     { label: 'On Hold',     color: '#d97706', bg: '#fffbeb' },
+  OPEN:        { label: 'Open',        color: '#64748b', bg: '#f1f5f9', darkBg: 'rgba(100,116,139,0.15)' },
+  IN_PROGRESS: { label: 'In Progress', color: '#2563eb', bg: '#eff6ff', darkBg: 'rgba(37,99,235,0.15)'   },
+  BLOCKED:     { label: 'Blocked',     color: '#dc2626', bg: '#fef2f2', darkBg: 'rgba(220,38,38,0.15)'   },
+  ON_HOLD:     { label: 'On Hold',     color: '#d97706', bg: '#fffbeb', darkBg: 'rgba(217,119,6,0.15)'   },
 };
 
 const PRIORITY_COLOR = { CRITICAL: '#dc2626', HIGH: '#d97706', MEDIUM: '#2563eb', LOW: '#64748b' };
@@ -75,19 +76,27 @@ export default function AIPriorityStrip({
     }
   }, [lazy, load]); // eslint-disable-line
 
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const heading = title || (mode === 'tasks' ? '⚡ Task Priorities' : '🧠 AI Priority Suggestions');
-  const accentColor = mode === 'tasks' ? '#0369a1' : '#7c3aed';
-  const accentLight = mode === 'tasks' ? '#075985' : '#5b21b6';
+  const accentColor = mode === 'tasks'
+    ? (isDark ? '#38bdf8' : '#0369a1')
+    : (isDark ? '#a78bfa' : '#7c3aed');
+  const accentLight = mode === 'tasks'
+    ? (isDark ? '#7dd3fc' : '#075985')
+    : (isDark ? '#c4b5fd' : '#5b21b6');
 
   return (
     <Box
       sx={{
         p: 2.5,
         borderRadius: 3,
-        background: mode === 'tasks'
-          ? 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)'
-          : 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
-        border: mode === 'tasks' ? '1px solid #bae6fd' : '1px solid #ddd6fe',
+        background: isDark
+          ? (mode === 'tasks' ? 'rgba(3,105,161,0.1)' : 'rgba(99,102,241,0.08)')
+          : (mode === 'tasks' ? 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)' : 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)'),
+        border: isDark
+          ? (mode === 'tasks' ? '1px solid rgba(125,211,252,0.2)' : '1px solid rgba(167,139,250,0.2)')
+          : (mode === 'tasks' ? '1px solid #bae6fd' : '1px solid #ddd6fe'),
         ...sx,
       }}
     >
@@ -105,7 +114,7 @@ export default function AIPriorityStrip({
               <Chip
                 label={badge.label}
                 size="small"
-                sx={{ bgcolor: badge.bg, color: badge.color, border: `1px solid ${badge.border}`, fontWeight: 600, fontSize: '0.62rem', height: 18 }}
+                sx={{ bgcolor: isDark ? badge.darkBg : badge.bg, color: isDark ? badge.darkColor : badge.color, border: `1px solid ${isDark ? badge.darkBorder : badge.border}`, fontWeight: 600, fontSize: '0.62rem', height: 18 }}
               />
             );
           })()}
@@ -153,7 +162,9 @@ export default function AIPriorityStrip({
             py: 0.75,
             '&:hover': {
               borderColor: accentColor,
-              bgcolor: mode === 'tasks' ? '#e0f2fe' : '#f5f3ff',
+              bgcolor: isDark
+                ? (mode === 'tasks' ? 'rgba(3,105,161,0.15)' : 'rgba(99,102,241,0.1)')
+                : (mode === 'tasks' ? '#e0f2fe' : '#f5f3ff'),
             },
           }}
         >
@@ -188,9 +199,15 @@ export default function AIPriorityStrip({
           {state.data.suggestions.map((item, idx) => {
             const sc = STATUS_CHIP[item.status] || STATUS_CHIP.OPEN;
             const priorityColor = PRIORITY_COLOR[item.priority] || '#64748b';
-            const accentColor = mode === 'tasks' ? '#0369a1' : '#7c3aed';
-            const accentBorder = mode === 'tasks' ? '#7dd3fc' : '#e9d5ff';
-            const accentHoverBorder = mode === 'tasks' ? '#38bdf8' : '#c084fc';
+            const accentColor = mode === 'tasks'
+              ? (isDark ? '#38bdf8' : '#0369a1')
+              : (isDark ? '#a78bfa' : '#7c3aed');
+            const accentBorder = isDark
+              ? (mode === 'tasks' ? 'rgba(56,189,248,0.25)' : 'rgba(167,139,250,0.25)')
+              : (mode === 'tasks' ? '#7dd3fc' : '#e9d5ff');
+            const accentHoverBorder = isDark
+              ? (mode === 'tasks' ? 'rgba(56,189,248,0.5)' : 'rgba(167,139,250,0.5)')
+              : (mode === 'tasks' ? '#38bdf8' : '#c084fc');
             const accentHoverShadow = mode === 'tasks'
               ? 'rgba(3,105,161,0.12)'
               : 'rgba(124,58,237,0.12)';
@@ -207,7 +224,7 @@ export default function AIPriorityStrip({
                 onClick={() => onCardClick?.(item.id)}
                 sx={{
                   flexShrink: 0, width: 210,
-                  bgcolor: '#fff',
+                  bgcolor: 'background.paper',
                   borderRadius: 2.5,
                   border: `1px solid ${accentBorder}`,
                   p: 1.75,
@@ -225,7 +242,7 @@ export default function AIPriorityStrip({
                   <Box
                     sx={{
                       minWidth: 20, height: 20, borderRadius: '50%', flexShrink: 0, mt: 0.1,
-                      background: idx === 0 ? rankGrad0 : idx === 1 ? rankGrad1 : '#e2e8f0',
+                      background: idx === 0 ? rankGrad0 : idx === 1 ? rankGrad1 : (isDark ? '#334155' : '#e2e8f0'),
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}
                   >
@@ -243,7 +260,7 @@ export default function AIPriorityStrip({
                 {/* Status + priority */}
                 <Box display="flex" alignItems="center" gap={0.75}>
                   <Chip label={sc.label} size="small"
-                    sx={{ bgcolor: sc.bg, color: sc.color, fontWeight: 600, fontSize: '0.62rem', height: 18, border: 0 }} />
+                    sx={{ bgcolor: isDark ? sc.darkBg : sc.bg, color: sc.color, fontWeight: 600, fontSize: '0.62rem', height: 18, border: 0 }} />
                   <Box display="flex" alignItems="center" gap={0.3}>
                     <FiberManualRecord sx={{ fontSize: 7, color: priorityColor }} />
                     <Typography variant="caption" sx={{ color: priorityColor, fontWeight: 600, fontSize: '0.62rem' }}>

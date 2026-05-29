@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
-  Typography, Grid, Box, Button, Chip, LinearProgress, Divider, Tooltip, Avatar,
+  Typography, Grid, Box, Button, Chip, LinearProgress, Divider, Tooltip, Avatar, useTheme,
 } from '@mui/material';
 import {
   Add, CheckCircleOutline, AccessTime, Block, TrendingUp,
@@ -50,23 +50,25 @@ function SparkBars({ data, height = 52 }) {
 }
 
 const STATUS_CONFIG = {
-  OPEN:        { label: 'Open',        color: '#64748b', bg: '#f1f5f9' },
-  IN_PROGRESS: { label: 'In Progress', color: '#2563eb', bg: '#eff6ff' },
-  BLOCKED:     { label: 'Blocked',     color: '#dc2626', bg: '#fef2f2' },
-  ON_HOLD:     { label: 'On Hold',     color: '#d97706', bg: '#fffbeb' },
-  COMPLETED:   { label: 'Completed',   color: '#059669', bg: '#f0fdf4' },
-  CANCELLED:   { label: 'Cancelled',   color: '#6b7280', bg: '#f9fafb' },
+  OPEN:        { label: 'Open',        color: '#64748b', bg: '#f1f5f9', darkBg: 'rgba(100,116,139,0.15)' },
+  IN_PROGRESS: { label: 'In Progress', color: '#2563eb', bg: '#eff6ff', darkBg: 'rgba(37,99,235,0.15)'   },
+  BLOCKED:     { label: 'Blocked',     color: '#dc2626', bg: '#fef2f2', darkBg: 'rgba(220,38,38,0.15)'   },
+  ON_HOLD:     { label: 'On Hold',     color: '#d97706', bg: '#fffbeb', darkBg: 'rgba(217,119,6,0.15)'   },
+  COMPLETED:   { label: 'Completed',   color: '#059669', bg: '#f0fdf4', darkBg: 'rgba(5,150,105,0.15)'   },
+  CANCELLED:   { label: 'Cancelled',   color: '#6b7280', bg: '#f9fafb', darkBg: 'rgba(107,114,128,0.15)' },
 };
 const PRIORITY_CONFIG = {
-  CRITICAL: { color: '#dc2626', bg: '#fef2f2' },
-  HIGH:     { color: '#d97706', bg: '#fffbeb' },
-  MEDIUM:   { color: '#2563eb', bg: '#eff6ff' },
-  LOW:      { color: '#64748b', bg: '#f1f5f9' },
+  CRITICAL: { color: '#dc2626', bg: '#fef2f2', darkBg: 'rgba(220,38,38,0.15)'  },
+  HIGH:     { color: '#d97706', bg: '#fffbeb', darkBg: 'rgba(217,119,6,0.15)'  },
+  MEDIUM:   { color: '#2563eb', bg: '#eff6ff', darkBg: 'rgba(37,99,235,0.15)'  },
+  LOW:      { color: '#64748b', bg: '#f1f5f9', darkBg: 'rgba(100,116,139,0.15)' },
 };
 
 export default function Dashboard() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const { allItems, tasks } = useSelector((state) => state.initiatives);
   const { canvases } = useSelector((state) => state.canvas);
 
@@ -192,22 +194,30 @@ export default function Dashboard() {
     overdueItems.length > 0 && {
       label: `${overdueItems.length} overdue`,
       icon: <Warning sx={{ fontSize: 13 }} />,
-      sx: { bgcolor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' },
+      sx: isDark
+        ? { bgcolor: 'rgba(220,38,38,0.15)', color: '#f87171', border: '1px solid rgba(220,38,38,0.3)' }
+        : { bgcolor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' },
     },
     dueSoonItems.length > 0 && {
       label: `${dueSoonItems.length} due this week`,
       icon: <CalendarToday sx={{ fontSize: 13 }} />,
-      sx: { bgcolor: '#fffbeb', color: '#d97706', border: '1px solid #fde68a' },
+      sx: isDark
+        ? { bgcolor: 'rgba(217,119,6,0.15)', color: '#fbbf24', border: '1px solid rgba(217,119,6,0.3)' }
+        : { bgcolor: '#fffbeb', color: '#d97706', border: '1px solid #fde68a' },
     },
     noDueDateCount > 0 && {
       label: `${noDueDateCount} missing due date`,
       icon: null,
-      sx: { bgcolor: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0' },
+      sx: isDark
+        ? { bgcolor: 'rgba(100,116,139,0.15)', color: '#94a3b8', border: `1px solid ${theme.palette.divider}` }
+        : { bgcolor: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0' },
     },
     staleCount > 0 && {
       label: `${staleCount} stale (14+ days)`,
       icon: null,
-      sx: { bgcolor: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0' },
+      sx: isDark
+        ? { bgcolor: 'rgba(100,116,139,0.15)', color: '#94a3b8', border: `1px solid ${theme.palette.divider}` }
+        : { bgcolor: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0' },
     },
   ].filter(Boolean);
 
@@ -306,7 +316,7 @@ export default function Dashboard() {
         sx={{
           mt: 2.5, mb: dueSoonItems.length > 0 ? 2.5 : 4, px: 3, py: 2,
           bgcolor: 'background.paper',
-          border: '1px solid #e2e8f0',
+          border: `1px solid ${theme.palette.divider}`,
           borderRadius: 3,
           display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap',
         }}
@@ -380,7 +390,7 @@ export default function Dashboard() {
                   sx={{
                     flexShrink: 0, width: 220,
                     bgcolor: 'background.paper',
-                    border: '1px solid #e2e8f0',
+                    border: `1px solid ${theme.palette.divider}`,
                     borderRadius: 2.5, p: 2,
                     cursor: 'pointer',
                     transition: 'border-color 0.15s, box-shadow 0.15s',
@@ -389,7 +399,7 @@ export default function Dashboard() {
                 >
                   <Typography variant="body2" fontWeight={600} noWrap mb={0.75}>{item.title}</Typography>
                   <Box display="flex" justifyContent="space-between" alignItems="center">
-                    <Chip label={sc.label} size="small" sx={{ bgcolor: sc.bg, color: sc.color, fontWeight: 500, border: 0, fontSize: '0.68rem' }} />
+                    <Chip label={sc.label} size="small" sx={{ bgcolor: isDark ? sc.darkBg : sc.bg, color: sc.color, fontWeight: 500, border: 0, fontSize: '0.68rem' }} />
                     <Typography variant="caption" sx={{ color: daysLeft === 0 ? '#dc2626' : '#d97706', fontWeight: 600 }}>
                       {daysLeft === 0 ? 'Today' : `${daysLeft}d left`}
                     </Typography>
@@ -406,7 +416,7 @@ export default function Dashboard() {
 
         {/* Progress breakdown */}
         <Grid item xs={12} md={4}>
-          <Box sx={{ bgcolor: 'background.paper', borderRadius: 3, border: '1px solid #e2e8f0', p: 3, height: '100%' }}>
+          <Box sx={{ bgcolor: 'background.paper', borderRadius: 3, border: `1px solid ${theme.palette.divider}`, p: 3, height: '100%' }}>
             <Typography variant="h6" mb={0.5}>Initiative Progress</Typography>
             <Typography variant="caption" color="text.secondary">Top-level initiatives only</Typography>
             <Box display="flex" alignItems="flex-end" gap={1} mb={1.5} mt={2}>
@@ -440,7 +450,7 @@ export default function Dashboard() {
 
         {/* Assignee workload */}
         <Grid item xs={12} md={4}>
-          <Box sx={{ bgcolor: 'background.paper', borderRadius: 3, border: '1px solid #e2e8f0', p: 3, height: '100%' }}>
+          <Box sx={{ bgcolor: 'background.paper', borderRadius: 3, border: `1px solid ${theme.palette.divider}`, p: 3, height: '100%' }}>
             <Box display="flex" alignItems="center" gap={1} mb={0.5}>
               <Groups sx={{ fontSize: 18, color: '#6366f1' }} />
               <Typography variant="h6">Assignee Workload</Typography>
@@ -462,13 +472,13 @@ export default function Dashboard() {
                         <Chip
                           label={`${a.open} open`}
                           size="small"
-                          sx={{ bgcolor: '#eff6ff', color: '#2563eb', fontWeight: 600, fontSize: '0.65rem', height: 18, border: 0 }}
+                          sx={{ bgcolor: isDark ? 'rgba(37,99,235,0.15)' : '#eff6ff', color: '#2563eb', fontWeight: 600, fontSize: '0.65rem', height: 18, border: 0 }}
                         />
                         {a.blocked > 0 && (
                           <Chip
                             label={`${a.blocked} blocked`}
                             size="small"
-                            sx={{ bgcolor: '#fef2f2', color: '#dc2626', fontWeight: 600, fontSize: '0.65rem', height: 18, border: 0 }}
+                            sx={{ bgcolor: isDark ? 'rgba(220,38,38,0.15)' : '#fef2f2', color: '#dc2626', fontWeight: 600, fontSize: '0.65rem', height: 18, border: 0 }}
                           />
                         )}
                       </Box>
@@ -488,7 +498,7 @@ export default function Dashboard() {
 
         {/* Canvas breakdown */}
         <Grid item xs={12} md={4}>
-          <Box sx={{ bgcolor: 'background.paper', borderRadius: 3, border: '1px solid #e2e8f0', p: 3, height: '100%' }}>
+          <Box sx={{ bgcolor: 'background.paper', borderRadius: 3, border: `1px solid ${theme.palette.divider}`, p: 3, height: '100%' }}>
             <Typography variant="h6" mb={0.5}>Canvas Breakdown</Typography>
             <Typography variant="caption" color="text.secondary">Root initiatives by workspace</Typography>
             <Divider sx={{ my: 2 }} />
@@ -524,7 +534,7 @@ export default function Dashboard() {
         sx={{
           mb: 3, px: 3, py: 2.5,
           bgcolor: 'background.paper',
-          border: '1px solid #e2e8f0',
+          border: `1px solid ${theme.palette.divider}`,
           borderRadius: 3,
         }}
       >
@@ -546,7 +556,7 @@ export default function Dashboard() {
       </Box>
 
       {/* ── Recent Initiatives ── */}
-      <Box sx={{ bgcolor: 'background.paper', borderRadius: 3, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+      <Box sx={{ bgcolor: 'background.paper', borderRadius: 3, border: `1px solid ${theme.palette.divider}`, overflow: 'hidden' }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" px={3} py={2.25}>
           <Box>
             <Typography variant="h6">Recent Initiatives</Typography>
@@ -585,9 +595,9 @@ export default function Dashboard() {
                   onClick={() => navigate(`/initiatives?open=${item.id}`)}
                   sx={{
                     px: 3, py: 1.75,
-                    borderBottom: idx < recentRoots.length - 1 ? '1px solid #f1f5f9' : 0,
+                    borderBottom: idx < recentRoots.length - 1 ? `1px solid ${theme.palette.divider}` : 0,
                     display: 'flex', alignItems: 'center', gap: 2,
-                    '&:hover': { bgcolor: '#fafbff' },
+                    '&:hover': { bgcolor: isDark ? 'rgba(99,102,241,0.06)' : '#fafbff' },
                     transition: 'background 0.15s',
                     cursor: 'pointer',
                   }}
@@ -599,7 +609,7 @@ export default function Dashboard() {
                         <Chip
                           label="overdue"
                           size="small"
-                          sx={{ bgcolor: '#fef2f2', color: '#dc2626', fontWeight: 600, fontSize: '0.65rem', height: 18, border: 0 }}
+                          sx={{ bgcolor: isDark ? 'rgba(220,38,38,0.15)' : '#fef2f2', color: '#dc2626', fontWeight: 600, fontSize: '0.65rem', height: 18, border: 0 }}
                         />
                       )}
                     </Box>
@@ -614,11 +624,11 @@ export default function Dashboard() {
                       <Chip
                         label={`${childCount} sub`}
                         size="small"
-                        sx={{ bgcolor: '#f1f5f9', color: '#64748b', fontWeight: 500, border: 0, fontSize: '0.68rem' }}
+                        sx={{ bgcolor: isDark ? 'rgba(100,116,139,0.15)' : '#f1f5f9', color: '#64748b', fontWeight: 500, border: 0, fontSize: '0.68rem' }}
                       />
                     )}
-                    <Chip label={sc.label} size="small" sx={{ bgcolor: sc.bg, color: sc.color, fontWeight: 500, border: 0 }} />
-                    <Chip label={item.priority} size="small" sx={{ bgcolor: pc.bg, color: pc.color, fontWeight: 500, border: 0 }} />
+                    <Chip label={sc.label} size="small" sx={{ bgcolor: isDark ? sc.darkBg : sc.bg, color: sc.color, fontWeight: 500, border: 0 }} />
+                    <Chip label={item.priority} size="small" sx={{ bgcolor: isDark ? pc.darkBg : pc.bg, color: pc.color, fontWeight: 500, border: 0 }} />
                     {item.dueDate && (
                       <Typography variant="caption" sx={{ color: isOverdue ? '#dc2626' : 'text.secondary', fontWeight: isOverdue ? 600 : 400 }}>
                         {new Date(item.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -629,7 +639,7 @@ export default function Dashboard() {
               );
             })}
             {(noDueDateCount > 0 || staleCount > 0) && (
-              <Box px={3} py={1.25} bgcolor="#fafbff" display="flex" gap={2} flexWrap="wrap" borderTop="1px solid #f1f5f9">
+              <Box px={3} py={1.25} bgcolor={isDark ? 'background.default' : '#fafbff'} display="flex" gap={2} flexWrap="wrap" borderTop={`1px solid ${theme.palette.divider}`}>
                 {noDueDateCount > 0 && (
                   <Typography variant="caption" color="text.secondary">
                     ⚠ {noDueDateCount} active initiative{noDueDateCount !== 1 ? 's have' : ' has'} no due date
