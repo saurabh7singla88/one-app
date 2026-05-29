@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTheme } from '@mui/material/styles';
 import {
   Box, Typography, Button, TextField, Select, MenuItem,
   FormControl, InputLabel, Divider, CircularProgress, Alert,
@@ -33,6 +34,8 @@ const OLLAMA_DEFAULTS = ['llama3.1:latest', 'llama3.2:latest', 'mistral:latest',
 
 // ─── Features Section ────────────────────────────────────────────────────────
 function FeaturesSection() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(null); // key being saved
   const [flags, setFlags]       = useState({ feature_team_board: false, feature_ai_newsletter: false, feature_meeting_notes: true });
@@ -69,7 +72,7 @@ function FeaturesSection() {
     <Box
       sx={{
         display: 'flex', alignItems: 'flex-start', gap: 2, py: 2,
-        borderBottom: '1px solid #f1f5f9',
+        borderBottom: '1px solid', borderBottomColor: isDark ? '#334155' : '#f1f5f9',
         '&:last-child': { borderBottom: 0 },
         opacity: (!available && !enabled) ? 0.6 : 1,
       }}
@@ -112,11 +115,11 @@ function FeaturesSection() {
       {/* ── Meeting Notes ── highlighted feature ──────────────────────────── */}
       <Box
         sx={{
-          border: '1.5px solid #e0e7ff',
+          border: '1.5px solid', borderColor: isDark ? '#3730a3' : '#e0e7ff',
           borderRadius: 2.5,
           overflow: 'hidden',
           mb: 2,
-          bgcolor: flags.feature_meeting_notes ? '#fafafe' : '#fafafa',
+          bgcolor: isDark ? 'background.paper' : (flags.feature_meeting_notes ? '#fafafe' : '#fafafa'),
           transition: 'background 0.2s',
         }}
       >
@@ -143,8 +146,8 @@ function FeaturesSection() {
           <Box
             sx={{
               mx: 2.5, mb: 2, px: 2, py: 1.5,
-              bgcolor: 'white',
-              border: '1px solid #e0e7ff',
+              bgcolor: isDark ? 'background.default' : 'white',
+              border: '1px solid', borderColor: isDark ? '#3730a3' : '#e0e7ff',
               borderRadius: 2,
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
@@ -160,8 +163,8 @@ function FeaturesSection() {
               <Box key={title} display="flex" gap={1} alignItems="flex-start">
                 <Box sx={{ fontSize: '1rem', lineHeight: 1, mt: 0.15, flexShrink: 0 }}>{icon}</Box>
                 <Box>
-                  <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: '#4338ca', lineHeight: 1.3 }}>{title}</Typography>
-                  <Typography sx={{ fontSize: '0.72rem', color: '#6b7280', lineHeight: 1.4, mt: 0.25 }}>{desc}</Typography>
+                  <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: isDark ? '#a5b4fc' : '#4338ca', lineHeight: 1.3 }}>{title}</Typography>
+                  <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', lineHeight: 1.4, mt: 0.25 }}>{desc}</Typography>
                 </Box>
               </Box>
             ))}
@@ -202,14 +205,16 @@ function FeaturesSection() {
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 function Section({ icon, title, subtitle, children }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   return (
     <Paper
       elevation={0}
       sx={{
-        border: '1px solid #e2e8f0', borderRadius: 3, overflow: 'hidden', mb: 3,
+        border: '1px solid', borderColor: 'divider', borderRadius: 3, overflow: 'hidden', mb: 3,
       }}
     >
-      <Box sx={{ px: 3, py: 2.5, borderBottom: '1px solid #f1f5f9', bgcolor: '#fafafa' }}>
+      <Box sx={{ px: 3, py: 2.5, borderBottom: '1px solid', borderBottomColor: isDark ? '#334155' : '#f1f5f9', bgcolor: isDark ? 'background.default' : '#fafafa' }}>
         <Box display="flex" alignItems="center" gap={1.25}>
           {icon}
           <Box>
@@ -225,6 +230,8 @@ function Section({ icon, title, subtitle, children }) {
 
 // ─── AI Section ───────────────────────────────────────────────────────────────
 function AISection() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
   const [saved, setSaved]       = useState(false);
@@ -298,11 +305,11 @@ function AISection() {
               onClick={() => { setForm(f => ({ ...f, provider: pr.value })); setSaved(false); }}
               sx={{
                 display: 'flex', alignItems: 'center', gap: 1, px: 1.75, py: 1.25,
-                border: `2px solid ${p === pr.value ? '#6366f1' : '#e2e8f0'}`,
+                border: `2px solid ${p === pr.value ? '#6366f1' : (isDark ? '#334155' : '#e2e8f0')}`,
                 borderRadius: 2.5, cursor: 'pointer', minWidth: 160,
-                bgcolor: p === pr.value ? '#f0f0ff' : '#fff',
+                bgcolor: p === pr.value ? (isDark ? 'rgba(99,102,241,0.15)' : '#f0f0ff') : 'transparent',
                 transition: 'all 0.15s',
-                '&:hover': { borderColor: '#6366f1', bgcolor: '#f5f3ff' },
+                '&:hover': { borderColor: '#6366f1', bgcolor: isDark ? 'rgba(99,102,241,0.12)' : '#f5f3ff' },
               }}
             >
               <Typography sx={{ fontSize: '1.2rem', lineHeight: 1 }}>{pr.icon}</Typography>
@@ -458,6 +465,8 @@ function AISection() {
 
 // ─── Gmail Section ────────────────────────────────────────────────────────────
 function GmailSection() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [loading, setLoading]           = useState(true);
   const [saving, setSaving]             = useState(false);
   const [saved, setSaved]               = useState(false);
@@ -556,7 +565,7 @@ function GmailSection() {
       </Alert>
 
       {/* ── How-to steps — always visible ── */}
-      <Box sx={{ bgcolor: '#fafafa', border: '1px solid #e2e8f0', borderRadius: 2, px: 2.5, py: 2 }}>
+      <Box sx={{ bgcolor: isDark ? 'background.default' : '#fafafa', border: '1px solid', borderColor: isDark ? '#334155' : '#e2e8f0', borderRadius: 2, px: 2.5, py: 2 }}>
         <Typography variant="body2" fontWeight={700} mb={1.5} color="text.primary">
           How to generate a Google App Password
         </Typography>
@@ -664,7 +673,7 @@ function GmailSection() {
                 key={b.label}
                 label={`${b.icon}  ${b.label}`}
                 size="small"
-                sx={{ bgcolor: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', fontWeight: 500, fontSize: '0.7rem' }}
+                sx={{ bgcolor: isDark ? 'rgba(16,185,129,0.12)' : '#f0fdf4', color: isDark ? '#6ee7b7' : '#166534', border: '1px solid', borderColor: isDark ? 'rgba(16,185,129,0.3)' : '#bbf7d0', fontWeight: 500, fontSize: '0.7rem' }}
               />
             ))}
           </Box>
@@ -884,6 +893,8 @@ function JiraSection() {
 
 // ─── Turso Sync Section ───────────────────────────────────────────────────────
 function TursoSection() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
@@ -922,7 +933,7 @@ function TursoSection() {
           <strong>Connected</strong> — using database{' '}
           <code style={{ fontSize: '0.8em' }}>{status.databaseUrl}</code>
         </Alert>
-        <Alert severity="info" icon={false} sx={{ borderRadius: 2, bgcolor: '#f8faff', border: '1px solid #e0e7ff' }}>
+        <Alert severity="info" icon={false} sx={{ borderRadius: 2, bgcolor: isDark ? 'background.default' : '#f8faff', border: '1px solid', borderColor: isDark ? '#334155' : '#e0e7ff' }}>
           <Typography variant="caption" color="text.secondary">
             The database connection is configured via environment variables (<code>TURSO_DATABASE_URL</code> / <code>TURSO_AUTH_TOKEN</code>).
             To change the database, update your <code>.env</code> file and run <code>npm run docker:build</code>.
@@ -939,7 +950,7 @@ function TursoSection() {
         No database configured. Add your Turso credentials below.
       </Alert>
 
-      <Alert severity="info" icon={false} sx={{ borderRadius: 2, bgcolor: '#f8faff', border: '1px solid #e0e7ff' }}>
+      <Alert severity="info" icon={false} sx={{ borderRadius: 2, bgcolor: isDark ? 'background.default' : '#f8faff', border: '1px solid', borderColor: isDark ? '#334155' : '#e0e7ff' }}>
         <Typography variant="caption" color="text.secondary">
           Create a free database at{' '}
           <Link href="https://turso.tech" target="_blank" rel="noreferrer">turso.tech</Link>, then run:{' '}
@@ -997,7 +1008,7 @@ export default function Setup() {
     <Box sx={{ maxWidth: 860, mx: 'auto', px: { xs: 2, sm: 4 }, py: 4 }}>
       {/* Page title */}
       <Box mb={4}>
-        <Typography variant="h4" fontWeight={800} color="#1e293b" mb={0.5}>
+        <Typography variant="h4" fontWeight={800} color="text.primary" mb={0.5}>
           Setup
         </Typography>
         <Typography variant="body1" color="text.secondary">
