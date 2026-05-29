@@ -6,7 +6,8 @@ import logger from '../lib/logger.js';
 const router = Router();
 router.use(authenticate);
 
-const LLM_TIMEOUT = 30_000; // ms
+const LLM_TIMEOUT = 30_000;        // ms — OpenAI / Gemini
+const OLLAMA_TIMEOUT = 120_000;    // ms — local models can be slow
 
 // ─── Default fallback settings (env vars still honoured if no DB entry exists)
 const DEFAULTS = {
@@ -31,24 +32,36 @@ async function loadAISettings() {
 // ─── Provider: Ollama ─────────────────────────────────────────────────────────
 async function callOllama(settings, systemPrompt, userPrompt) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT);
+  const timer = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT);
+  // Note: `format: 'json'` is intentionally omitted — Gemma models (and some others)
+  // do not support Ollama's grammar-based JSON mode and will error or hang.
+  // JSON output is enforced via prompt instructions instead.
+  //
+  // In Docker, `localhost` refers to the container, not the host.
+  // Replace it with `host.docker.internal` so Ollama (running on the host) is reachable.
+  let ollamaBaseUrl = settings.ai_ollama_base_url || 'http://localhost:11434';
+  if (!process.env.ELECTRON) {
+    ollamaBaseUrl = ollamaBaseUrl.replace(/localhost/g, 'host.docker.internal');
+  }
   try {
-    const res = await fetch(`${settings.ai_ollama_base_url}/api/chat`, {
+    const res = await fetch(`${ollamaBaseUrl}/api/chat`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
       body: JSON.stringify({
-        model: settings.ai_ollama_model, stream: false, format: 'json',
-        options: { temperature: 0.1, num_predict: 1024 },
+        model: settings.ai_ollama_model, stream: false,
+        options: { temperature: 0.1, num_predict: 2048 },
         messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
       }),
     });
     if (!res.ok) {
-      logger.error(`Ollama non-OK response`, { status: res.status, model: settings.ai_ollama_model });
+      let detail = `HTTP ${res.status}`;
+      try { const errBody = await res.json(); detail = errBody.error || detail; } catch {}
+      logger.error(`Ollama non-OK response`, { status: res.status, model: settings.ai_ollama_model, detail });
       return null;
     }
     const data = await res.json();
     return (data.message?.content || data.response || '').trim();
   } catch (e) {
-    logger.error('Ollama call failed', e);
+    logger.error('Ollama call failed', { error: e.message, model: settings.ai_ollama_model });
     return null;
   } finally { clearTimeout(timer); }
 }

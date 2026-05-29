@@ -26,3 +26,5 @@ services:
       # For production deployments replace with your real domain.
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
