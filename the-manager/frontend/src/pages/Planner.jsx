@@ -372,11 +372,11 @@ function DailyView({ date, mode, slots }) {
     setLoading(true);
     setError('');
     try {
-      const [entriesRes, tasksRes] = await Promise.all([
+      const [entriesRes, tasksRes, allRes] = await Promise.all([
         api.get(`/planner?date=${dateStr}`),
-        api.get('/initiatives?isStandaloneTask=true&status=OPEN'),
+        api.get('/initiatives?isStandaloneTask=true&status=OPEN&lean=true'),
+        api.get('/initiatives?status=IN_PROGRESS&lean=true'),
       ]);
-      const all = await api.get('/initiatives?status=IN_PROGRESS');
       const dayNoteEntry = entriesRes.data.find(e => e.slot === 'DAY_NOTE');
       setDayNote(dayNoteEntry?.note || '');
       const slotEntries = entriesRes.data.filter(e => e.slot !== 'DAY_NOTE');
@@ -384,7 +384,7 @@ function DailyView({ date, mode, slots }) {
 
       // Build bank: all open tasks + in-progress initiatives not already scheduled
       const scheduledIds = new Set(slotEntries.map(e => e.initiativeId).filter(Boolean));
-      const allTasks = [...tasksRes.data, ...all.data.filter(t => !tasksRes.data.find(x => x.id === t.id))];
+      const allTasks = [...tasksRes.data, ...allRes.data.filter(t => !tasksRes.data.find(x => x.id === t.id))];
       setBank(allTasks.filter(t => !scheduledIds.has(t.id)));
     } catch (e) {
       setError('Failed to load planner data');

@@ -11,7 +11,7 @@ router.use(authenticate);
 // Get all initiatives (with filtering)
 router.get('/', async (req, res, next) => {
   try {
-    const { status, priority, parentId, search, canvasId, isStandaloneTask, type } = req.query;
+    const { status, priority, parentId, search, canvasId, isStandaloneTask, type, lean } = req.query;
 
     const where = {};
 
@@ -71,20 +71,21 @@ router.get('/', async (req, res, next) => {
 
     const initiatives = await prisma.initiative.findMany({
       where,
-      include: {
-        createdBy: {
-          select: { id: true, name: true, email: true, avatar: true }
-        },
-        assignees: {
-          select: { id: true, name: true, email: true, avatar: true }
-        },
-        linkedInitiative: {
-          select: { id: true, title: true }
-        },
-        _count: {
-          select: { children: true, comments: true, links: true }
-        }
-      },
+      ...(lean === 'true'
+        ? {
+            select: {
+              id: true, title: true, status: true, priority: true,
+              dueDate: true, type: true, isStandaloneTask: true,
+            },
+          }
+        : {
+            include: {
+              createdBy: { select: { id: true, name: true, email: true, avatar: true } },
+              assignees:  { select: { id: true, name: true, email: true, avatar: true } },
+              linkedInitiative: { select: { id: true, title: true } },
+              _count: { select: { children: true, comments: true, links: true } },
+            },
+          }),
       orderBy: [
         { sortOrder: 'asc' },
         { createdAt: 'desc' }

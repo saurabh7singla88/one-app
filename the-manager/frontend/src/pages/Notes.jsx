@@ -238,7 +238,7 @@ function NoteUnlockDialog({ note, open, onClose, onUnlocked, encryptionEnabled }
           <Box display="flex" alignItems="center" gap={0.75} mb={2} px={1.25} py={0.75}
             sx={{ bgcolor: isDark ? 'rgba(99,102,241,0.12)' : '#f0f4ff', borderRadius: 1.5, border: `1px solid ${isDark ? 'rgba(99,102,241,0.3)' : '#e0e7ff'}` }}>
             <EnhancedEncryption sx={{ fontSize: 15, color: '#6366f1', flexShrink: 0 }} />
-            <Typography variant="caption" sx={{ color: '#4f46e5', lineHeight: 1.4 }}>
+            <Typography variant="caption" sx={{ color: isDark ? '#818cf8' : '#4f46e5', lineHeight: 1.4 }}>
               Content is AES-256-GCM encrypted at rest
             </Typography>
           </Box>
@@ -282,7 +282,7 @@ function NoteTreeItem({ note, depth, selectedId, onSelect, onAddChild, expandedI
           borderLeft: '3px solid',
           borderLeftColor: active ? '#6366f1' : 'transparent',
           bgcolor: active ? (isDark ? 'rgba(99,102,241,0.15)' : '#f5f3ff') : 'transparent',
-          borderBottom: '1px solid #f1f5f9',
+          borderBottom: `1px solid ${theme.palette.divider}`,
           '&:hover': { bgcolor: active ? (isDark ? 'rgba(99,102,241,0.15)' : '#f5f3ff') : (isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc') },
           '&:hover .note-add-btn': { opacity: 1 },
         }}
@@ -307,7 +307,7 @@ function NoteTreeItem({ note, depth, selectedId, onSelect, onAddChild, expandedI
               fontWeight={active ? 700 : depth === 0 ? 600 : 500}
               sx={{
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                color: active ? '#4f46e5' : 'text.primary',
+                color: active ? (isDark ? '#818cf8' : '#4f46e5') : 'text.primary',
                 fontSize: depth === 0 ? '0.875rem' : `${Math.max(0.78, 0.875 - depth * 0.025)}rem`,
                 lineHeight: 1.4, flex: 1, minWidth: 0,
               }}
@@ -653,10 +653,10 @@ export default function Notes() {
     <Box sx={{ height: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', gap: 0 }}>
       <CanvasSelector screen="notes" countsByCanvas={noteCounts} />
 
-      <Box sx={{ display: 'flex', flex: 1, gap: 0, overflow: 'hidden', borderRadius: 3, border: '1px solid #e2e8f0', bgcolor: 'background.paper' }}>
+      <Box sx={{ display: 'flex', flex: 1, gap: 0, overflow: 'hidden', borderRadius: 3, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
 
         {/* ── Left panel ── */}
-        <Box sx={{ width: 280, flexShrink: 0, borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <Box sx={{ width: 280, flexShrink: 0, borderRight: '1px solid', borderRightColor: 'divider', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <Box sx={{ px: 2, pt: 2, pb: 1.5 }}>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
               <Typography fontWeight={700} variant="subtitle1">Notes</Typography>
@@ -711,11 +711,11 @@ export default function Notes() {
                         px: 2, py: 1.5, cursor: 'pointer', borderLeft: '3px solid',
                         borderLeftColor: active ? '#6366f1' : 'transparent',
                         bgcolor: active ? (isDark ? 'rgba(99,102,241,0.15)' : '#f5f3ff') : 'transparent',
-                        borderBottom: '1px solid #f1f5f9',
+                        borderBottom: `1px solid ${theme.palette.divider}`,
                         '&:hover': { bgcolor: active ? (isDark ? 'rgba(99,102,241,0.15)' : '#f5f3ff') : (isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc') },
                       }}>
                       <Typography variant="body2" fontWeight={600}
-                        sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: active ? '#4f46e5' : 'text.primary' }}>
+                        sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: active ? (isDark ? '#818cf8' : '#4f46e5') : 'text.primary' }}>
                         {note.title}
                       </Typography>
                       <Box display="flex" alignItems="center" gap={0.75} mt={0.4} flexWrap="wrap">
@@ -769,7 +769,7 @@ export default function Notes() {
           ) : (
             <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               {/* Toolbar */}
-              <Box sx={{ px: 3, py: 1.5, borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 1, bgcolor: isDark ? 'background.paper' : '#fafafa' }}>
+              <Box sx={{ px: 3, py: 1.5, borderBottom: '1px solid', borderBottomColor: 'divider', display: 'flex', alignItems: 'center', gap: 1, bgcolor: isDark ? 'background.paper' : '#fafafa' }}>
                 <Box display="flex" alignItems="center" gap={0.75} sx={{ flex: 1 }}>
                   {saveState === 'saving' && <><CircularProgress size={12} /><Typography variant="caption" color="text.disabled">Saving…</Typography></>}
                   {saveState === 'saved'  && <><CheckCircle sx={{ fontSize: 14, color: '#22c55e' }} /><Typography variant="caption" color="text.disabled">Saved</Typography></>}
@@ -895,7 +895,7 @@ export default function Notes() {
                 {(() => {
                   const children = allNotes.filter(n => n.parentId === editorNote.id);
                   return (
-                    <Box sx={{ mt: 1, borderTop: '1px solid #f1f5f9', pt: 2 }}>
+                    <Box sx={{ mt: 1, borderTop: '1px solid', borderTopColor: 'divider', pt: 2 }}>
                       <Box display="flex" alignItems="center" justifyContent="space-between" mb={1.5}>
                         <Box display="flex" alignItems="center" gap={1}>
                           <SubdirectoryArrowRight sx={{ fontSize: 16, color: 'text.disabled' }} />
@@ -916,7 +916,7 @@ export default function Notes() {
                         </Tooltip>
                       </Box>
                       {children.length === 0 ? (
-                        <Box sx={{ py: 2, textAlign: 'center', border: '1.5px dashed #e2e8f0', borderRadius: 2 }}>
+                        <Box sx={{ py: 2, textAlign: 'center', border: '1.5px dashed', borderColor: 'divider', borderRadius: 2 }}>
                           <Typography variant="caption" color="text.disabled">No sub-notes yet — click + to add one</Typography>
                         </Box>
                       ) : (
@@ -928,8 +928,8 @@ export default function Notes() {
                               sx={{
                                 display: 'flex', alignItems: 'center', gap: 1.5,
                                 px: 2, py: 1.25, borderRadius: 2, cursor: 'pointer',
-                                border: '1px solid #e2e8f0',
-                                '&:hover': { bgcolor: '#f8f7ff', borderColor: '#c7d2fe' },
+                                border: '1px solid', borderColor: 'divider',
+                                '&:hover': { bgcolor: isDark ? 'rgba(99,102,241,0.1)' : '#f8f7ff', borderColor: isDark ? 'rgba(99,102,241,0.4)' : '#c7d2fe' },
                                 transition: 'all 0.15s',
                               }}
                             >
