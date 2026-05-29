@@ -8,8 +8,8 @@ import {
 } from '@mui/material';
 import {
   Add, Delete, Lock, LockOpen, LockOutlined, Search, Clear,
-  NoteAlt, CheckCircle, ChevronRight, ExpandMore, SubdirectoryArrowRight,
-  Dashboard, EnhancedEncryption,
+  NoteAlt, CheckCircle, ChevronRight, ExpandMore,
+  Dashboard, EnhancedEncryption, MenuOpen, MenuOutlined,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import api from '../api/axios';
@@ -414,6 +414,7 @@ export default function Notes() {
   // Selected / editor state
   const [selectedId, setSelectedId] = useState(null);
   const [editorNote, setEditorNote] = useState(null);
+  const [leftOpen, setLeftOpen] = useState(true);
   const [saveState, setSaveState] = useState('saved');
   const saveTimer = useRef(null);
   const editorRef = useRef(null);
@@ -650,17 +651,30 @@ export default function Notes() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <Box sx={{ height: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', gap: 0 }}>
+    <Box sx={{ height: 'calc(100vh - 48px)', display: 'flex', flexDirection: 'column', gap: 0 }}>
       <CanvasSelector screen="notes" countsByCanvas={noteCounts} />
 
       <Box sx={{ display: 'flex', flex: 1, gap: 0, overflow: 'hidden', borderRadius: 3, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
 
         {/* ── Left panel ── */}
-        <Box sx={{ width: 280, flexShrink: 0, borderRight: '1px solid', borderRightColor: 'divider', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <Box sx={{
+          width: leftOpen ? 280 : 0,
+          flexShrink: 0,
+          borderRight: leftOpen ? '1px solid' : 'none',
+          borderRightColor: 'divider',
+          display: 'flex', flexDirection: 'column',
+          overflow: 'hidden',
+          transition: 'width 0.2s ease',
+        }}>
           <Box sx={{ px: 2, pt: 2, pb: 1.5 }}>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
               <Typography fontWeight={700} variant="subtitle1">Notes</Typography>
               <Box display="flex" gap={0.5}>
+                <Tooltip title="Collapse panel">
+                  <IconButton size="small" onClick={() => setLeftOpen(false)} sx={{ color: 'text.disabled' }}>
+                    <MenuOpen sx={{ fontSize: 18 }} />
+                  </IconButton>
+                </Tooltip>
                 <Button size="small" variant="contained"
                   startIcon={creating ? <CircularProgress size={14} /> : <Add />}
                   onClick={() => handleCreate(null)} disabled={creating || !isUnlocked}
@@ -758,6 +772,15 @@ export default function Notes() {
 
         {/* ── Right panel ── */}
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {!leftOpen && (
+            <Box sx={{ px: 1.5, py: 1, borderBottom: '1px solid', borderBottomColor: 'divider', display: 'flex', alignItems: 'center', bgcolor: isDark ? 'background.paper' : '#fafafa' }}>
+              <Tooltip title="Show notes list">
+                <IconButton size="small" onClick={() => setLeftOpen(true)} sx={{ color: 'text.secondary', borderRadius: 1.5 }}>
+                  <MenuOutlined sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          )}
           {!isUnlocked ? (
             <UnlockScreen onUnlocked={() => { setIsUnlocked(true); fetchNotes(); }} encryptionEnabled={encryptionEnabled} />
           ) : !editorNote ? (
@@ -868,7 +891,7 @@ export default function Notes() {
                   Last edited {format(new Date(editorNote.updatedAt), 'MMM d, yyyy · h:mm a')}
                 </Typography>
               </Box>
-              <Divider sx={{ mx: 3, my: 1.5 }} />
+              <Divider sx={{ my: 1.5 }} />
               {/* Body */}
               <Box sx={{ flex: 1, px: 3, pb: 3, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <Box sx={{ position: 'relative' }}>
@@ -879,7 +902,7 @@ export default function Notes() {
                     onChange={v => handleEditorChange('content', v)}
                     placeholder="Start writing…"
                     minHeight={320}
-                    fontSize="1rem"
+                    fontSize="0.875rem"
                   />
                   <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.75 }}>
                     <RephraseTool
@@ -891,61 +914,7 @@ export default function Notes() {
                     />
                   </Box>
                 </Box>
-                {/* Sub-notes section */}
-                {(() => {
-                  const children = allNotes.filter(n => n.parentId === editorNote.id);
-                  return (
-                    <Box sx={{ mt: 1, borderTop: '1px solid', borderTopColor: 'divider', pt: 2 }}>
-                      <Box display="flex" alignItems="center" justifyContent="space-between" mb={1.5}>
-                        <Box display="flex" alignItems="center" gap={1}>
-                          <SubdirectoryArrowRight sx={{ fontSize: 16, color: 'text.disabled' }} />
-                          <Typography variant="caption" fontWeight={700} color="text.secondary" textTransform="uppercase" letterSpacing="0.06em">
-                            Sub-notes
-                          </Typography>
-                          {children.length > 0 && (
-                            <Box sx={{ px: 0.75, py: 0.1, borderRadius: 10, bgcolor: '#6366f122', minWidth: 20, textAlign: 'center' }}>
-                              <Typography variant="caption" fontWeight={700} sx={{ color: '#6366f1', fontSize: '0.7rem' }}>{children.length}</Typography>
-                            </Box>
-                          )}
-                        </Box>
-                        <Tooltip title="Add sub-note">
-                          <IconButton size="small" onClick={() => handleCreate(editorNote.id)}
-                            sx={{ color: '#6366f1', bgcolor: '#6366f111', '&:hover': { bgcolor: '#6366f122' }, width: 26, height: 26 }}>
-                            <Add sx={{ fontSize: 15 }} />
-                          </IconButton>
-                        </Tooltip>
-                      </Box>
-                      {children.length === 0 ? (
-                        <Box sx={{ py: 2, textAlign: 'center', border: '1.5px dashed', borderColor: 'divider', borderRadius: 2 }}>
-                          <Typography variant="caption" color="text.disabled">No sub-notes yet — click + to add one</Typography>
-                        </Box>
-                      ) : (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                          {children.map(child => (
-                            <Box
-                              key={child.id}
-                              onClick={() => openNote(child)}
-                              sx={{
-                                display: 'flex', alignItems: 'center', gap: 1.5,
-                                px: 2, py: 1.25, borderRadius: 2, cursor: 'pointer',
-                                border: '1px solid', borderColor: 'divider',
-                                '&:hover': { bgcolor: isDark ? 'rgba(99,102,241,0.1)' : '#f8f7ff', borderColor: isDark ? 'rgba(99,102,241,0.4)' : '#c7d2fe' },
-                                transition: 'all 0.15s',
-                              }}
-                            >
-                              <NoteAlt sx={{ fontSize: 16, color: '#94a3b8', flexShrink: 0 }} />
-                              <Box sx={{ flex: 1, minWidth: 0 }}>
-                                <Typography variant="body2" fontWeight={600} noWrap>{child.title || 'Untitled'}</Typography>
-                                <Typography variant="caption" color="text.disabled">{timeAgo(child.updatedAt)}</Typography>
-                              </Box>
-                              <ChevronRight sx={{ fontSize: 16, color: 'text.disabled' }} />
-                            </Box>
-                          ))}
-                        </Box>
-                      )}
-                    </Box>
-                  );
-                })()}
+
               </Box>
             </Box>
           )}

@@ -2,7 +2,7 @@ import { Outlet } from 'react-router-dom';
 import {
   Box, Typography, Button, Drawer, List, ListItem,
   ListItemButton, ListItemIcon, ListItemText, IconButton,
-  Avatar, Divider, Tooltip, AppBar, Toolbar, Container,
+  Avatar, Divider, Tooltip, AppBar, Toolbar,
 } from '@mui/material';
 import {
   Dashboard as DashboardIcon, List as ListIcon, Logout, Menu as MenuIcon,
@@ -323,17 +323,16 @@ export default function Layout() {
         component="main"
         sx={{
           flexGrow: 1,
-          p: { xs: 2, sm: 3.5 },
+          px: { xs: 1, sm: 1.5 },
+          py: { xs: 1, sm: 1.5 },
           width: { sm: `calc(100% - ${drawerWidth}px)` },
           mt: { xs: 8, sm: 0 },
           minHeight: '100vh',
           transition: 'width 0.2s ease',
         }}
       >
-        <Container maxWidth="xl" disableGutters>
-          <Outlet />
-        </Container>
-        <Box component="footer" sx={{ mt: 4, pb: 2, textAlign: 'right' }}>
+        <Outlet />
+        <Box component="footer" sx={{ mt: 2, pb: 2, textAlign: 'right' }}>
           <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.7rem' }}>
             Built by {import.meta.env.VITE_APP_AUTHOR || 'Nebrix'}
           </Typography>

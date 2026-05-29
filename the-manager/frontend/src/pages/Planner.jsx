@@ -723,7 +723,7 @@ function DailyView({ date, mode, slots }) {
           </Box>
 
           <SortableContext items={[...bank, ...customBankItems].map(t => `bank:${t.id}`)} strategy={verticalListSortingStrategy}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, overflowY: 'auto', maxHeight: 'calc(100vh - 360px)', pr: 0.5 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, overflowY: 'auto', maxHeight: 'calc(100vh - 328px)', pr: 0.5 }}>
               {loading ? [1, 2, 3].map(i => <Skeleton key={i} variant="rounded" height={56} />) :
                 (bank.length === 0 && customBankItems.length === 0)
                   ? <Typography variant="caption" sx={{ color: 'text.disabled', textAlign: 'center', py: 2, display: 'block' }}>All tasks scheduled!</Typography>
@@ -870,7 +870,7 @@ export default function Planner() {
   const nextWeek = () => setCurrentDate(d => addDays(d, 7));
 
   return (
-    <Box sx={{ maxWidth: 1200 }}>
+    <Box>
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2.5, flexWrap: 'wrap' }}>
         <Box>

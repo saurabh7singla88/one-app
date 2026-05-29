@@ -1,5 +1,5 @@
-import { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { Box, IconButton, Tooltip, Divider } from '@mui/material';
+import { useRef, useEffect, forwardRef, useImperativeHandle, useState } from 'react';
+import { Box, IconButton, Tooltip, Divider, Select, MenuItem } from '@mui/material';
 import {
   FormatBold, FormatItalic, StrikethroughS,
   FormatListBulleted, FormatListNumbered, FormatQuote,
@@ -8,6 +8,15 @@ import {
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
+import { TextStyle } from '@tiptap/extension-text-style';
+import { FontFamily } from '@tiptap/extension-font-family';
+
+const FONTS = [
+  { label: 'Default', value: '' },
+  { label: 'Serif', value: 'Georgia, "Times New Roman", serif' },
+  { label: 'Mono', value: '"JetBrains Mono", Consolas, Monaco, monospace' },
+  { label: 'Sans', value: 'Inter, "Helvetica Neue", Arial, sans-serif' },
+];
 
 const btnSx = (active) => ({
   minWidth: 26, height: 26, p: 0, borderRadius: 0.75,
@@ -43,6 +52,7 @@ const TipTapEditor = forwardRef(function TipTapEditor(
 ) {
   const settingFromProp = useRef(false);
   const isMounted = useRef(true);
+  const [fontFamily, setFontFamily] = useState('');
 
   useEffect(() => {
     isMounted.current = true;
@@ -53,6 +63,8 @@ const TipTapEditor = forwardRef(function TipTapEditor(
     extensions: [
       StarterKit,
       Placeholder.configure({ placeholder }),
+      TextStyle,
+      FontFamily,
     ],
     content: content || '',
     onUpdate: ({ editor: e }) => {
@@ -112,7 +124,7 @@ const TipTapEditor = forwardRef(function TipTapEditor(
           p: '10px 12px',
           minHeight,
           fontSize,
-          lineHeight: 1.7,
+          lineHeight: 1.6,
           color: 'text.primary',
           '& p': { m: 0, mb: '4px' },
           '& ul, & ol': { pl: '24px', m: 0, mb: '4px' },
@@ -163,6 +175,33 @@ const TipTapEditor = forwardRef(function TipTapEditor(
               </Tooltip>
             )
         )}
+        <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+        <Select
+          size="small"
+          value={fontFamily}
+          onChange={e => {
+            const val = e.target.value;
+            setFontFamily(val);
+            if (val) {
+              editor.chain().focus().setFontFamily(val).run();
+            } else {
+              editor.chain().focus().unsetFontFamily().run();
+            }
+          }}
+          onMouseDown={e => e.preventDefault()}
+          displayEmpty
+          sx={{
+            height: 26, fontSize: '0.72rem', minWidth: 72,
+            '& .MuiSelect-select': { py: 0, px: 1 },
+            '& fieldset': { borderColor: 'divider' },
+          }}
+        >
+          {FONTS.map(f => (
+            <MenuItem key={f.value} value={f.value} sx={{ fontSize: '0.8rem', fontFamily: f.value || 'inherit' }}>
+              {f.label}
+            </MenuItem>
+          ))}
+        </Select>
       </Box>
       {/* Editable area */}
       <EditorContent editor={editor} />

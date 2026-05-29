@@ -8,7 +8,7 @@ export default function InitiativeDetail() {
   const navigate = useNavigate();
 
   return (
-    <Box sx={{ height: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <Box sx={{ height: 'calc(100vh - 48px)', display: 'flex', flexDirection: 'column', gap: 2 }}>
       {/* back breadcrumb */}
       <Box display="flex" alignItems="center" gap={1}>
         <Tooltip title="Go back">

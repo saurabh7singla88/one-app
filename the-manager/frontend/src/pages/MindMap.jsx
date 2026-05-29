@@ -737,7 +737,7 @@ function MindMapInner() {
   }
 
   return (
-    <Box sx={{ height: 'calc(100vh - 90px)', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: 'calc(100vh - 58px)', display: 'flex', flexDirection: 'column' }}>
       <CanvasSelector screen="mindmap" />
 
       {/* ── FULL-WIDTH CANVAS ────────────────────────────────────────────── */}
