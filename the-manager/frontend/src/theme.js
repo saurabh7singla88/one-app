@@ -46,7 +46,7 @@ export function createAppTheme(mode) {
     text: {
       primary: isDark ? '#f1f5f9' : '#0f172a',
       secondary: isDark ? '#94a3b8' : '#64748b',
-      disabled: isDark ? '#475569' : '#94a3b8',
+      disabled: isDark ? '#64748b' : '#94a3b8',
     },
     divider: borderColor,
   },

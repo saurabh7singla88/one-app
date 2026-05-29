@@ -7,7 +7,7 @@ import {
   Avatar, Tooltip, CircularProgress, InputAdornment, Slider,
   List, ListItem, ListItemAvatar, ListItemText,
   Dialog, DialogTitle, DialogContent, DialogActions, InputLabel,
-  Autocomplete, Menu, Checkbox
+  Autocomplete, Menu, Checkbox, useTheme
 } from '@mui/material';
 import {
   Close, Add, Delete, Edit, Link as LinkIcon, Comment,
@@ -23,21 +23,22 @@ import InitiativeSummaryDialog from './InitiativeSummaryDialog';
 import RephraseTool from './RephraseTool';
 import RichEditor from './RichEditor';
 import RichText, { stripMarkdown } from './RichText';
+import TipTapEditor from './TipTapEditor';
 
 const STATUS_CONFIG = {
-  OPEN:        { label: 'Open',        color: '#475569', bg: '#f1f5f9' },
-  IN_PROGRESS: { label: 'In Progress', color: '#1d4ed8', bg: '#dbeafe' },
-  BLOCKED:     { label: 'Blocked',     color: '#b91c1c', bg: '#fee2e2' },
-  ON_HOLD:     { label: 'On Hold',     color: '#b45309', bg: '#fef3c7' },
-  COMPLETED:   { label: 'Completed',   color: '#065f46', bg: '#d1fae5' },
-  CANCELLED:   { label: 'Cancelled',   color: '#6b7280', bg: '#f3f4f6' },
+  OPEN:        { label: 'Open',        color: '#475569', bg: '#f1f5f9',  darkBg: '#1e293b' },
+  IN_PROGRESS: { label: 'In Progress', color: '#60a5fa', bg: '#dbeafe',  darkBg: '#1e3a5f' },
+  BLOCKED:     { label: 'Blocked',     color: '#f87171', bg: '#fee2e2',  darkBg: '#3b1212' },
+  ON_HOLD:     { label: 'On Hold',     color: '#fbbf24', bg: '#fef3c7',  darkBg: '#3b2a00' },
+  COMPLETED:   { label: 'Completed',   color: '#34d399', bg: '#d1fae5',  darkBg: '#052e1c' },
+  CANCELLED:   { label: 'Cancelled',   color: '#94a3b8', bg: '#f3f4f6',  darkBg: '#1e293b' },
 };
 
 const PRIORITY_CONFIG = {
-  CRITICAL: { color: '#dc2626', bg: '#fef2f2' },
-  HIGH:     { color: '#d97706', bg: '#fffbeb' },
-  MEDIUM:   { color: '#6366f1', bg: '#eff6ff' },
-  LOW:      { color: '#64748b', bg: '#f1f2f9' },
+  CRITICAL: { color: '#f87171', bg: '#fef2f2', darkBg: '#3b0a0a' },
+  HIGH:     { color: '#fbbf24', bg: '#fffbeb', darkBg: '#3b2000' },
+  MEDIUM:   { color: '#818cf8', bg: '#eff6ff', darkBg: '#1e1b4b' },
+  LOW:      { color: '#94a3b8', bg: '#f1f2f9', darkBg: '#1e293b' },
 };
 
 const ACTION_LABELS = {
@@ -62,6 +63,8 @@ function TabPanel({ value, idx, children }) {
 }
 
 export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pageMode = false }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { allItems, items } = useSelector(s => s.initiatives);
@@ -84,6 +87,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
   // Comments state
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
+  const [commentEditorKey, setCommentEditorKey] = useState(0);
   const [sendingComment, setSendingComment] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editingCommentText, setEditingCommentText] = useState('');
@@ -269,12 +273,14 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
 
   // ── Comments ───────────────────────────────────────────────────
   const handleSendComment = async () => {
-    if (!commentText.trim()) return;
+    const isEmpty = !commentText.trim() || commentText === '<p></p>';
+    if (isEmpty) return;
     setSendingComment(true);
     try {
       const res = await api.post(`/initiatives/${initiativeId}/comments`, { content: commentText });
       setComments(prev => [...prev, res.data]);
       setCommentText('');
+      setCommentEditorKey(k => k + 1);
     } catch (e) {
       console.error(e);
     } finally {
@@ -544,17 +550,17 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
     const isJira = item.type === 'JIRA';
     const statusColor = (() => {
       const cat = (data?.statusCategory || '').toLowerCase();
-      if (cat === 'done') return { color: '#065f46', bg: '#d1fae5' };
-      if (cat === 'in progress') return { color: '#1d4ed8', bg: '#dbeafe' };
-      return { color: '#475569', bg: '#f1f5f9' };
+      if (cat === 'done') return { color: isDark ? '#6ee7b7' : '#065f46', bg: isDark ? '#052e1c' : '#d1fae5' };
+      if (cat === 'in progress') return { color: isDark ? '#93c5fd' : '#1d4ed8', bg: isDark ? '#1e3a5f' : '#dbeafe' };
+      return { color: isDark ? '#94a3b8' : '#475569', bg: isDark ? '#1e293b' : '#f1f5f9' };
     })();
     const isSelected = selectedItemIds.has(item.id);
     return (
       <Box key={item.id} sx={{
         p: 1.5, borderRadius: 2,
-        border: `1.5px solid ${isSelected ? '#a78bfa' : isJira ? '#dbeafe' : '#e0f2fe'}`,
-        bgcolor: isSelected ? '#fdf4ff' : isJira ? '#fafbff' : '#f0f9ff',
-        '&:hover': { borderColor: isSelected ? '#8b5cf6' : '#0052cc55', boxShadow: '0 1px 6px rgba(0,82,204,0.07)' },
+        border: `1.5px solid ${isSelected ? '#a78bfa' : isJira ? (isDark ? '#1e3a5f' : '#dbeafe') : (isDark ? '#0c4a6e' : '#e0f2fe')}`,
+        bgcolor: isSelected ? (isDark ? 'rgba(139,92,246,0.12)' : '#fdf4ff') : isJira ? (isDark ? 'rgba(99,102,241,0.06)' : '#fafbff') : (isDark ? 'rgba(14,116,144,0.08)' : '#f0f9ff'),
+        '&:hover': { borderColor: isSelected ? '#8b5cf6' : (isDark ? 'rgba(0,82,204,0.5)' : '#0052cc55'), boxShadow: isDark ? 'none' : '0 1px 6px rgba(0,82,204,0.07)' },
         transition: 'all 0.15s',
       }}>
         {/* Header row */}
@@ -583,7 +589,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
           <OpenInNew sx={{ fontSize: 10, color: '#0052cc' }} />
           {isJira && data?.issueType && (
             <Chip label={data.issueType} size="small"
-              sx={{ height: 15, fontSize: '0.58rem', bgcolor: '#eff6ff', color: '#1d4ed8', border: 0 }} />
+              sx={{ height: 15, fontSize: '0.58rem', bgcolor: isDark ? '#1e3a5f' : '#eff6ff', color: isDark ? '#93c5fd' : '#1d4ed8', border: 0 }} />
           )}
           {isJira && data?.status && (
             <Chip label={data.status} size="small"
@@ -623,7 +629,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
         </Box>
 
         {/* Title */}
-        <Typography variant="body2" fontWeight={600} mb={0.4} sx={{ color: '#1e293b', lineHeight: 1.3 }}>
+        <Typography variant="body2" fontWeight={600} mb={0.4} sx={{ color: 'text.primary', lineHeight: 1.3 }}>
           {isJira ? data?.summary : data?.title}
         </Typography>
 
@@ -652,7 +658,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
           <Box display="flex" flexWrap="wrap" gap={0.5} mt={0.5}>
             {data.labels.map(lbl => (
               <Chip key={lbl} label={lbl} size="small"
-                sx={{ height: 15, fontSize: '0.58rem', bgcolor: '#f1f5f9', color: 'text.secondary', border: 0 }} />
+                sx={{ height: 15, fontSize: '0.58rem', bgcolor: isDark ? '#1e293b' : '#f1f5f9', color: 'text.secondary', border: 0 }} />
             ))}
           </Box>
         )}
@@ -677,12 +683,12 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
               </Typography>
             </Box>
             {expandedChildren[item.id] && childrenMap[item.id].length > 0 && (
-              <Box mt={0.5} pl={0.5} sx={{ borderLeft: `2px solid ${isJira ? '#dbeafe' : '#bae6fd'}` }}
+              <Box mt={0.5} pl={0.5} sx={{ borderLeft: `2px solid ${isJira ? (isDark ? '#1e3a5f' : '#dbeafe') : (isDark ? '#0c4a6e' : '#bae6fd')}` }}
                 display="flex" flexDirection="column" gap={0.5}>
                 {isJira ? childrenMap[item.id].map(child => {
                   const childCat = (child.statusCategory || '').toLowerCase();
-                  const childStatusColor = childCat === 'done' ? { color: '#065f46', bg: '#d1fae5' }
-                    : childCat === 'in progress' ? { color: '#1d4ed8', bg: '#dbeafe' } : { color: '#475569', bg: '#f1f5f9' };
+                  const childStatusColor = childCat === 'done' ? (isDark ? { color: '#6ee7b7', bg: '#064e3b' } : { color: '#065f46', bg: '#d1fae5' })
+                    : childCat === 'in progress' ? { color: isDark ? '#93c5fd' : '#1d4ed8', bg: isDark ? '#1e3a5f' : '#dbeafe' } : { color: isDark ? '#94a3b8' : '#475569', bg: isDark ? '#1e293b' : '#f1f5f9' };
                   return (
                     <Box key={child.key} sx={{ pl: 1 }}>
                       <Box display="flex" alignItems="center" gap={0.5} flexWrap="wrap">
@@ -691,7 +697,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                           sx={{ color: '#0052cc', textDecoration: 'none', fontSize: '0.7rem', '&:hover': { textDecoration: 'underline' } }}>
                           {child.key}
                         </Typography>
-                        {child.issueType && <Chip label={child.issueType} size="small" sx={{ height: 13, fontSize: '0.56rem', bgcolor: '#eff6ff', color: '#1d4ed8', border: 0 }} />}
+                        {child.issueType && <Chip label={child.issueType} size="small" sx={{ height: 13, fontSize: '0.56rem', bgcolor: isDark ? '#1e3a5f' : '#eff6ff', color: isDark ? '#93c5fd' : '#1d4ed8', border: 0 }} />}
                         <Chip label={child.status || '?'} size="small"
                           sx={{ height: 13, fontSize: '0.56rem', bgcolor: childStatusColor.bg, color: childStatusColor.color, border: 0 }} />
                         {child.assignee && <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.62rem' }}>{child.assignee}</Typography>}
@@ -712,7 +718,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                         sx={{ color: '#0077b6', textDecoration: 'none', fontSize: '0.7rem', '&:hover': { textDecoration: 'underline' } }}>
                         {page.title}
                       </Typography>
-                      {page.spaceKey && <Chip label={page.spaceKey} size="small" sx={{ height: 13, fontSize: '0.56rem', bgcolor: '#e0f2fe', color: '#0077b6', border: 0 }} />}
+                      {page.spaceKey && <Chip label={page.spaceKey} size="small" sx={{ height: 13, fontSize: '0.56rem', bgcolor: isDark ? '#0c4a6e' : '#e0f2fe', color: isDark ? '#7dd3fc' : '#0077b6', border: 0 }} />}
                     </Box>
                     {page.excerpt && (
                       <Typography variant="caption" color="text.secondary"
@@ -729,7 +735,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
 
         {/* Per-item AI result */}
         {itemAiMap[item.id]?.open && (
-          <Box mt={1} sx={{ p: 1.25, borderRadius: 1.5, border: '1.5px solid #ddd6fe', bgcolor: '#faf5ff' }}>
+          <Box mt={1} sx={{ p: 1.25, borderRadius: 1.5, border: '1.5px solid', borderColor: isDark ? 'rgba(139,92,246,0.4)' : '#ddd6fe', bgcolor: isDark ? 'rgba(139,92,246,0.08)' : '#faf5ff' }}>
             <Box display="flex" alignItems="center" justifyContent="space-between" mb={0.5}>
               <Typography variant="caption" fontWeight={700} color="#7c3aed" sx={{ fontSize: '0.7rem' }}>
                 {AI_ACTIONS.find(a => a.value === itemAiMap[item.id]?.action)?.emoji || '✨'}{' '}
@@ -766,7 +772,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
       ) : (
         <>
           {/* Header */}
-          <Box sx={{ px: 3, pt: 2.5, pb: 0, borderBottom: '1px solid #f1f5f9' }}>
+          <Box sx={{ px: 3, pt: 2.5, pb: 0, borderBottom: '1px solid', borderBottomColor: 'divider' }}>
             <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
               <Box sx={{ flex: 1, pr: 1 }}>
                 {editingTitle ? (
@@ -794,13 +800,13 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                   <Chip
                     label={detail.type}
                     size="small"
-                    sx={{ height: 18, fontSize: '0.65rem', bgcolor: '#f1f5f9', color: 'text.secondary', border: 0 }}
+                    sx={{ height: 18, fontSize: '0.65rem', bgcolor: isDark ? '#1e293b' : '#f1f5f9', color: 'text.secondary', border: 0 }}
                   />
                   {detail.parent && (
                     <Chip
                       label={`↑ ${detail.parent.title}`}
                       size="small"
-                      sx={{ height: 18, fontSize: '0.65rem', bgcolor: '#f1f5f9', color: 'text.secondary', border: 0 }}
+                      sx={{ height: 18, fontSize: '0.65rem', bgcolor: isDark ? '#1e293b' : '#f1f5f9', color: 'text.secondary', border: 0 }}
                     />
                   )}
                 </Box>
@@ -834,7 +840,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                   onChange={e => handleStatusChange(e.target.value)}
                   sx={{
                     height: 26, fontSize: '0.72rem',
-                    bgcolor: STATUS_CONFIG[detail.status]?.bg,
+                    bgcolor: isDark ? STATUS_CONFIG[detail.status]?.darkBg : STATUS_CONFIG[detail.status]?.bg,
                     color: STATUS_CONFIG[detail.status]?.color,
                     fontWeight: 600,
                     '.MuiOutlinedInput-notchedOutline': { border: 'none' },
@@ -851,7 +857,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                   onChange={e => handlePriorityChange(e.target.value)}
                   sx={{
                     height: 26, fontSize: '0.72rem',
-                    bgcolor: PRIORITY_CONFIG[detail.priority]?.bg,
+                    bgcolor: isDark ? PRIORITY_CONFIG[detail.priority]?.darkBg : PRIORITY_CONFIG[detail.priority]?.bg,
                     color: PRIORITY_CONFIG[detail.priority]?.color,
                     fontWeight: 600,
                     '.MuiOutlinedInput-notchedOutline': { border: 'none' },
@@ -977,7 +983,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                       label={tag}
                       size="small"
                       onDelete={() => removeTag(tag)}
-                      sx={{ bgcolor: '#eff6ff', color: '#1d4ed8', border: 0, fontWeight: 500, fontSize: '0.7rem' }}
+                      sx={{ bgcolor: isDark ? '#1e1b4b' : '#eff6ff', color: isDark ? '#a5b4fc' : '#1d4ed8', border: 0, fontWeight: 500, fontSize: '0.7rem' }}
                     />
                   ))}
                   <Autocomplete
@@ -1046,12 +1052,12 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                   <Box display="flex" flexWrap="wrap" gap={0.75} mb={1}>
                     {(detail.assignees || []).map(a => (
                       <Box key={a.id} display="flex" alignItems="center" gap={0.6}
-                        sx={{ bgcolor: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 5, pl: 0.75, pr: 0.5, py: 0.25 }}
+                        sx={{ bgcolor: isDark ? 'rgba(99,102,241,0.1)' : '#f0f9ff', border: '1px solid', borderColor: isDark ? 'rgba(99,102,241,0.3)' : '#bae6fd', borderRadius: 5, pl: 0.75, pr: 0.5, py: 0.25 }}
                       >
                         <Avatar sx={{ width: 18, height: 18, fontSize: '0.6rem', bgcolor: '#6366f1' }}>
                           {a.name.charAt(0).toUpperCase()}
                         </Avatar>
-                        <Typography variant="caption" fontWeight={500} sx={{ color: '#0369a1' }}>{a.name}</Typography>
+                        <Typography variant="caption" fontWeight={500} sx={{ color: isDark ? '#7dd3fc' : '#0369a1' }}>{a.name}</Typography>
                         <IconButton
                           size="small"
                           sx={{ p: 0.1, ml: 0.1, color: '#94a3b8', '&:hover': { color: 'error.main' } }}
@@ -1080,7 +1086,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                           setFullData(prev => prev ? { ...prev, assignees: newAssignees } : prev);
                         }}
                         sx={{ fontSize: '0.8rem' }}
-                        renderValue={() => <Typography sx={{ fontSize: '0.8rem', color: 'text.disabled' }}>+ Add assignee…</Typography>}
+                        renderValue={() => <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>+ Add assignee…</Typography>}
                       >
                         {users
                           .filter(u => !(detail.assignees || []).find(a => a.id === u.id))
@@ -1116,7 +1122,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                       </Typography>
                       {integrationItems.length > 0 && (
                         <Chip label={integrationItems.length} size="small"
-                          sx={{ height: 16, fontSize: '0.6rem', bgcolor: '#eff6ff', color: '#1d4ed8', border: 0 }} />
+                          sx={{ height: 16, fontSize: '0.6rem', bgcolor: isDark ? '#1e3a5f' : '#eff6ff', color: isDark ? '#93c5fd' : '#1d4ed8', border: 0 }} />
                       )}
                     </Box>
                     <Box display="flex" alignItems="center" gap={0.5}>
@@ -1130,7 +1136,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                               fontSize: '0.72rem', textTransform: 'none', py: 0.25, px: 0.75, minWidth: 0,
                               color: chatOpen ? '#fff' : '#6366f1',
                               bgcolor: chatOpen ? '#6366f1' : 'transparent',
-                              '&:hover': { bgcolor: chatOpen ? '#4f46e5' : '#eff6ff' },
+                              '&:hover': { bgcolor: chatOpen ? '#4f46e5' : (isDark ? 'rgba(99,102,241,0.12)' : '#eff6ff') },
                             }}
                           >
                             Chat
@@ -1151,7 +1157,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                   {/* Selection toolbar */}
                   {selectedItemIds.size > 0 && (
                     <Box display="flex" alignItems="center" gap={1} mb={1.25} px={1} py={0.75}
-                      sx={{ bgcolor: '#f0f9ff', borderRadius: 1.5, border: '1px solid #bae6fd', flexWrap: 'wrap' }}>
+                      sx={{ bgcolor: isDark ? 'rgba(3,105,161,0.15)' : '#f0f9ff', borderRadius: 1.5, border: `1px solid ${isDark ? '#0c4a6e' : '#bae6fd'}`, flexWrap: 'wrap' }}>
                       <Typography variant="caption" fontWeight={700} color="#0369a1" sx={{ flexShrink: 0 }}>
                         {selectedItemIds.size} selected
                       </Typography>
@@ -1185,7 +1191,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
 
                   {/* Consolidated AI result panel */}
                   {consolidatedAi.open && (
-                    <Box sx={{ p: 1.5, mb: 1.5, borderRadius: 2, border: '1.5px solid #ddd6fe', bgcolor: '#faf5ff' }}>
+                    <Box sx={{ p: 1.5, mb: 1.5, borderRadius: 2, border: '1.5px solid', borderColor: isDark ? 'rgba(139,92,246,0.4)' : '#ddd6fe', bgcolor: isDark ? 'rgba(139,92,246,0.08)' : '#faf5ff' }}>
                       <Box display="flex" alignItems="center" justifyContent="space-between" mb={0.75}>
                         <Typography variant="caption" fontWeight={700} color="#7c3aed">
                           {AI_ACTIONS.find(a => a.value === consolidatedAi.action)?.emoji || '✨'}{' '}
@@ -1217,7 +1223,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
 
                   {/* ── Chat panel ── */}
                   {chatOpen && integrationItems.length > 0 && (
-                    <Box sx={{ mb: 1.5, borderRadius: 2, border: '1.5px solid #c7d2fe', bgcolor: '#fafbff', overflow: 'hidden' }}>
+                    <Box sx={{ mb: 1.5, borderRadius: 2, border: '1.5px solid', borderColor: isDark ? 'rgba(99,102,241,0.3)' : '#c7d2fe', bgcolor: isDark ? 'rgba(99,102,241,0.06)' : '#fafbff', overflow: 'hidden' }}>
                       {/* Chat header */}
                       <Box display="flex" alignItems="center" justifyContent="space-between"
                         sx={{ px: 1.5, py: 0.75, bgcolor: '#6366f1', borderBottom: '1px solid #c7d2fe' }}>
@@ -1260,7 +1266,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                               {['Summarize the current status', 'What are the blockers?', 'Who is working on what?', 'What should we do next?'].map(hint => (
                                 <Chip key={hint} label={hint} size="small"
                                   onClick={() => setChatInput(hint)}
-                                  sx={{ fontSize: '0.66rem', height: 20, cursor: 'pointer', bgcolor: '#eff6ff', color: '#4f46e5', '&:hover': { bgcolor: '#e0e7ff' } }} />
+                                  sx={{ fontSize: '0.66rem', height: 20, cursor: 'pointer', bgcolor: isDark ? 'rgba(99,102,241,0.12)' : '#eff6ff', color: isDark ? '#a5b4fc' : '#4f46e5', '&:hover': { bgcolor: isDark ? 'rgba(99,102,241,0.2)' : '#e0e7ff' } }} />
                               ))}
                             </Box>
                           </Box>
@@ -1293,7 +1299,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                       </Box>
 
                       {/* Input area */}
-                      <Box sx={{ px: 1.25, pb: 1.25, pt: 0.5, borderTop: '1px solid #e0e7ff' }}>
+                      <Box sx={{ px: 1.25, pb: 1.25, pt: 0.5, borderTop: '1px solid', borderTopColor: 'divider' }}>
                         <Box display="flex" gap={0.75} alignItems="flex-end">
                           <TextField
                             fullWidth size="small" multiline maxRows={4}
@@ -1322,7 +1328,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
 
                   {/* Add form */}
                   {showIntForm && (
-                    <Box sx={{ p: 1.5, bgcolor: '#f8fafc', borderRadius: 2, border: '1px solid #e2e8f0', mb: 1.5 }}>
+                    <Box sx={{ p: 1.5, bgcolor: isDark ? 'background.default' : '#f8fafc', borderRadius: 2, border: '1px solid', borderColor: 'divider', mb: 1.5 }}>
                       {/* Type toggle */}
                       <Box display="flex" gap={0.75} mb={1.25}>
                         {['JIRA', 'CONFLUENCE'].map(t => (
@@ -1331,9 +1337,9 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                             onClick={() => { setIntAddType(t); setIntInput(''); setIntError(''); }}
                             sx={{
                               px: 1.25, py: 0.4, borderRadius: 1.5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600,
-                              border: `1.5px solid ${intAddType === t ? '#0052cc' : '#e2e8f0'}`,
-                              bgcolor: intAddType === t ? '#eff6ff' : '#fff',
-                              color: intAddType === t ? '#0052cc' : 'text.secondary',
+                              border: `1.5px solid ${intAddType === t ? '#0052cc' : (isDark ? '#334155' : '#e2e8f0')}`,
+                              bgcolor: intAddType === t ? (isDark ? '#1e3a5f' : '#eff6ff') : 'transparent',
+                              color: intAddType === t ? (isDark ? '#93c5fd' : '#0052cc') : 'text.secondary',
                               transition: 'all 0.12s',
                             }}
                           >
@@ -1384,18 +1390,18 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
 
                       const statusColor = (() => {
                         const cat = (data?.statusCategory || '').toLowerCase();
-                        if (cat === 'done') return { color: '#065f46', bg: '#d1fae5' };
-                        if (cat === 'in progress') return { color: '#1d4ed8', bg: '#dbeafe' };
-                        return { color: '#475569', bg: '#f1f5f9' };
+                        if (cat === 'done') return isDark ? { color: '#6ee7b7', bg: '#064e3b' } : { color: '#065f46', bg: '#d1fae5' };
+                        if (cat === 'in progress') return { color: isDark ? '#93c5fd' : '#1d4ed8', bg: isDark ? '#1e3a5f' : '#dbeafe' };
+        return { color: isDark ? '#94a3b8' : '#475569', bg: isDark ? '#1e293b' : '#f1f5f9' };
                       })();
 
                       const isSelected = selectedItemIds.has(item.id);
                       return (
                         <Box key={item.id} sx={{
                           p: 1.5, borderRadius: 2,
-                          border: `1.5px solid ${isSelected ? '#a78bfa' : isJira ? '#dbeafe' : '#e0f2fe'}`,
-                          bgcolor: isSelected ? '#fdf4ff' : isJira ? '#fafbff' : '#f0f9ff',
-                          '&:hover': { borderColor: isSelected ? '#8b5cf6' : '#0052cc55', boxShadow: '0 1px 6px rgba(0,82,204,0.07)' },
+                          border: `1.5px solid ${isSelected ? '#a78bfa' : isJira ? (isDark ? '#1e3a5f' : '#dbeafe') : (isDark ? '#0c4a6e' : '#e0f2fe')}`,
+                          bgcolor: isSelected ? (isDark ? 'rgba(139,92,246,0.12)' : '#fdf4ff') : isJira ? (isDark ? 'rgba(99,102,241,0.06)' : '#fafbff') : (isDark ? 'rgba(14,116,144,0.08)' : '#f0f9ff'),
+                          '&:hover': { borderColor: isSelected ? '#8b5cf6' : (isDark ? 'rgba(0,82,204,0.5)' : '#0052cc55'), boxShadow: isDark ? 'none' : '0 1px 6px rgba(0,82,204,0.07)' },
                           transition: 'all 0.15s',
                         }}>
                           {/* Header row: checkbox + type badge + key/link + actions */}
@@ -1433,7 +1439,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                             <OpenInNew sx={{ fontSize: 10, color: '#0052cc' }} />
                             {isJira && data?.issueType && (
                               <Chip label={data.issueType} size="small"
-                                sx={{ height: 15, fontSize: '0.58rem', bgcolor: '#eff6ff', color: '#1d4ed8', border: 0 }} />
+                                sx={{ height: 15, fontSize: '0.58rem', bgcolor: isDark ? '#1e3a5f' : '#eff6ff', color: isDark ? '#93c5fd' : '#1d4ed8', border: 0 }} />
                             )}
                             {isJira && data?.status && (
                               <Chip label={data.status} size="small"
@@ -1492,7 +1498,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                           </Box>
 
                           {/* Title / Summary */}
-                          <Typography variant="body2" fontWeight={600} mb={0.4} sx={{ color: '#1e293b', lineHeight: 1.3 }}>
+                          <Typography variant="body2" fontWeight={600} mb={0.4} sx={{ color: 'text.primary', lineHeight: 1.3 }}>
                             {isJira ? data?.summary : data?.title}
                           </Typography>
 
@@ -1536,7 +1542,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                             <Box display="flex" flexWrap="wrap" gap={0.5} mt={0.5}>
                               {data.labels.map(lbl => (
                                 <Chip key={lbl} label={lbl} size="small"
-                                  sx={{ height: 15, fontSize: '0.58rem', bgcolor: '#f1f5f9', color: 'text.secondary', border: 0 }} />
+                                  sx={{ height: 15, fontSize: '0.58rem', bgcolor: isDark ? '#1e293b' : '#f1f5f9', color: 'text.secondary', border: 0 }} />
                               ))}
                             </Box>
                           )}
@@ -1569,15 +1575,15 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                               </Box>
                               {expandedChildren[item.id] && childrenMap[item.id].length > 0 && (
                                 <Box mt={0.5} pl={0.5}
-                                  sx={{ borderLeft: `2px solid ${isJira ? '#dbeafe' : '#bae6fd'}` }}
+                                  sx={{ borderLeft: `2px solid ${isJira ? (isDark ? '#1e3a5f' : '#dbeafe') : (isDark ? '#0c4a6e' : '#bae6fd')}` }}
                                   display="flex" flexDirection="column" gap={0.5}>
                                   {isJira ? childrenMap[item.id].map(child => {
                                     const childCat = (child.statusCategory || '').toLowerCase();
                                     const childStatusColor = childCat === 'done'
-                                      ? { color: '#065f46', bg: '#d1fae5' }
+                                      ? (isDark ? { color: '#6ee7b7', bg: '#064e3b' } : { color: '#065f46', bg: '#d1fae5' })
                                       : childCat === 'in progress'
-                                        ? { color: '#1d4ed8', bg: '#dbeafe' }
-                                        : { color: '#475569', bg: '#f1f5f9' };
+                                        ? (isDark ? { color: '#93c5fd', bg: '#1e3a5f' } : { color: '#1d4ed8', bg: '#dbeafe' })
+                                        : (isDark ? { color: '#94a3b8', bg: '#1e293b' } : { color: '#475569', bg: '#f1f5f9' });
                                     return (
                                       <Box key={child.key} sx={{ pl: 1 }}>
                                         <Box display="flex" alignItems="center" gap={0.5} flexWrap="wrap">
@@ -1588,7 +1594,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                                           </Typography>
                                           {child.issueType && (
                                             <Chip label={child.issueType} size="small"
-                                              sx={{ height: 13, fontSize: '0.56rem', bgcolor: '#eff6ff', color: '#1d4ed8', border: 0 }} />
+                                              sx={{ height: 13, fontSize: '0.56rem', bgcolor: isDark ? '#1e3a5f' : '#eff6ff', color: isDark ? '#93c5fd' : '#1d4ed8', border: 0 }} />
                                           )}
                                           <Chip label={child.status || '?'} size="small"
                                             sx={{ height: 13, fontSize: '0.56rem', bgcolor: childStatusColor.bg, color: childStatusColor.color, border: 0 }} />
@@ -1616,7 +1622,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                                         </Typography>
                                         {page.spaceKey && (
                                           <Chip label={page.spaceKey} size="small"
-                                            sx={{ height: 13, fontSize: '0.56rem', bgcolor: '#e0f2fe', color: '#0077b6', border: 0 }} />
+                                            sx={{ height: 13, fontSize: '0.56rem', bgcolor: isDark ? '#0c4a6e' : '#e0f2fe', color: isDark ? '#7dd3fc' : '#0077b6', border: 0 }} />
                                         )}
                                       </Box>
                                       {page.excerpt && (
@@ -1634,7 +1640,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
 
                           {/* Per-item AI result */}
                           {itemAiMap[item.id]?.open && (
-                            <Box mt={1} sx={{ p: 1.25, borderRadius: 1.5, border: '1.5px solid #ddd6fe', bgcolor: '#faf5ff' }}>
+                            <Box mt={1} sx={{ p: 1.25, borderRadius: 1.5, border: '1.5px solid', borderColor: isDark ? 'rgba(139,92,246,0.4)' : '#ddd6fe', bgcolor: isDark ? 'rgba(139,92,246,0.08)' : '#faf5ff' }}>
                               <Box display="flex" alignItems="center" justifyContent="space-between" mb={0.5}>
                                 <Typography variant="caption" fontWeight={700} color="#7c3aed" sx={{ fontSize: '0.7rem' }}>
                                   {AI_ACTIONS.find(a => a.value === itemAiMap[item.id]?.action)?.emoji || '✨'}{' '}
@@ -1723,7 +1729,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                 </Button>
 
                 {showLinkForm && (
-                  <Box sx={{ p: 2, bgcolor: '#f8fafc', borderRadius: 2, border: '1px solid #e2e8f0', mb: 2 }}>
+                  <Box sx={{ p: 2, bgcolor: isDark ? 'background.default' : '#f8fafc', borderRadius: 2, border: '1px solid', borderColor: 'divider', mb: 2 }}>
                     <TextField
                       fullWidth size="small" label="URL *" value={linkForm.url}
                       onChange={e => setLinkForm(f => ({ ...f, url: e.target.value }))}
@@ -1764,8 +1770,8 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                     <Box
                       key={link.id}
                       sx={{
-                        p: 1.75, mb: 1.25, borderRadius: 2, border: '1px solid #e2e8f0',
-                        '&:hover': { borderColor: '#6366f1', boxShadow: '0 2px 8px rgba(99,102,241,0.08)' },
+                        p: 1.75, mb: 1.25, borderRadius: 2, border: '1px solid', borderColor: isDark ? '#334155' : '#e2e8f0',
+                        '&:hover': { borderColor: '#6366f1', boxShadow: isDark ? 'none' : '0 2px 8px rgba(99,102,241,0.08)' },
                         transition: 'all 0.15s',
                       }}
                     >
@@ -1792,7 +1798,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                             <Typography variant="caption" color="text.secondary" display="block" mt={0.25}>{link.description}</Typography>
                           )}
                           {link.category && (
-                            <Chip label={link.category} size="small" sx={{ height: 16, fontSize: '0.6rem', mt: 0.5, bgcolor: '#f1f5f9', color: 'text.secondary', border: 0 }} />
+                            <Chip label={link.category} size="small" sx={{ height: 16, fontSize: '0.6rem', mt: 0.5, bgcolor: isDark ? '#1e293b' : '#f1f5f9', color: 'text.secondary', border: 0 }} />
                           )}
                         </Box>
                         <Tooltip title="Delete">
@@ -1818,7 +1824,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                       </Typography>
                       {integrationItems.length > 0 && (
                         <Chip label={integrationItems.length} size="small"
-                          sx={{ height: 16, fontSize: '0.6rem', bgcolor: '#eff6ff', color: '#1d4ed8', border: 0 }} />
+                          sx={{ height: 16, fontSize: '0.6rem', bgcolor: isDark ? '#1e3a5f' : '#eff6ff', color: isDark ? '#93c5fd' : '#1d4ed8', border: 0 }} />
                       )}
                     </Box>
                     {integrationItems.length > 0 && (
@@ -1843,8 +1849,8 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                   {/* Selection toolbar */}
                   {selectedItemIds.size > 0 && (
                     <Box display="flex" alignItems="center" gap={1} mb={1.25} px={1} py={0.75}
-                      sx={{ bgcolor: '#f0f9ff', borderRadius: 1.5, border: '1px solid #bae6fd', flexWrap: 'wrap' }}>
-                      <Typography variant="caption" fontWeight={700} color="#0369a1" sx={{ flexShrink: 0 }}>
+                      sx={{ bgcolor: isDark ? 'rgba(99,102,241,0.1)' : '#f0f9ff', borderRadius: 1.5, border: '1px solid', borderColor: isDark ? 'rgba(99,102,241,0.3)' : '#bae6fd', flexWrap: 'wrap' }}>
+                      <Typography variant="caption" fontWeight={700} color={isDark ? '#7dd3fc' : '#0369a1'} sx={{ flexShrink: 0 }}>
                         {selectedItemIds.size} selected
                       </Typography>
                       <Select
@@ -1875,7 +1881,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
 
                   {/* Consolidated AI result */}
                   {consolidatedAi.open && (
-                    <Box sx={{ p: 1.5, mb: 1.5, borderRadius: 2, border: '1.5px solid #ddd6fe', bgcolor: '#faf5ff' }}>
+                    <Box sx={{ p: 1.5, mb: 1.5, borderRadius: 2, border: '1.5px solid', borderColor: isDark ? 'rgba(139,92,246,0.4)' : '#ddd6fe', bgcolor: isDark ? 'rgba(139,92,246,0.08)' : '#faf5ff' }}>
                       <Box display="flex" alignItems="center" justifyContent="space-between" mb={0.75}>
                         <Typography variant="caption" fontWeight={700} color="#7c3aed">
                           {AI_ACTIONS.find(a => a.value === consolidatedAi.action)?.emoji || '✨'}{' '}
@@ -1905,7 +1911,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
 
                   {/* Chat panel */}
                   {chatOpen && integrationItems.length > 0 && (
-                    <Box sx={{ mb: 1.5, borderRadius: 2, border: '1.5px solid #c7d2fe', bgcolor: '#fafbff', overflow: 'hidden' }}>
+                    <Box sx={{ mb: 1.5, borderRadius: 2, border: '1.5px solid', borderColor: isDark ? 'rgba(99,102,241,0.3)' : '#c7d2fe', bgcolor: isDark ? 'rgba(99,102,241,0.06)' : '#fafbff', overflow: 'hidden' }}>
                       <Box display="flex" alignItems="center" justifyContent="space-between"
                         sx={{ px: 1.5, py: 0.75, bgcolor: '#6366f1', borderBottom: '1px solid #c7d2fe' }}>
                         <Box display="flex" alignItems="center" gap={0.75}>
@@ -1945,7 +1951,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                               {['Summarize the current status', 'What are the blockers?', 'Who is working on what?', 'What should we do next?'].map(hint => (
                                 <Chip key={hint} label={hint} size="small"
                                   onClick={() => setChatInput(hint)}
-                                  sx={{ fontSize: '0.66rem', height: 20, cursor: 'pointer', bgcolor: '#eff6ff', color: '#4f46e5', '&:hover': { bgcolor: '#e0e7ff' } }} />
+                                  sx={{ fontSize: '0.66rem', height: 20, cursor: 'pointer', bgcolor: isDark ? 'rgba(99,102,241,0.12)' : '#eff6ff', color: isDark ? '#a5b4fc' : '#4f46e5', '&:hover': { bgcolor: isDark ? 'rgba(99,102,241,0.2)' : '#e0e7ff' } }} />
                               ))}
                             </Box>
                           </Box>
@@ -1976,7 +1982,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                         )}
                         <div ref={chatBottomRef} />
                       </Box>
-                      <Box sx={{ px: 1.25, pb: 1.25, pt: 0.5, borderTop: '1px solid #e0e7ff' }}>
+                      <Box sx={{ px: 1.25, pb: 1.25, pt: 0.5, borderTop: '1px solid', borderTopColor: 'divider' }}>
                         <Box display="flex" gap={0.75} alignItems="flex-end">
                           <TextField
                             fullWidth size="small" multiline maxRows={4}
@@ -2005,7 +2011,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
 
                   {/* Add form */}
                   {showIntForm && (
-                    <Box sx={{ p: 1.5, bgcolor: '#f8fafc', borderRadius: 2, border: '1px solid #e2e8f0', mb: 1.5 }}>
+                    <Box sx={{ p: 1.5, bgcolor: isDark ? 'background.default' : '#f8fafc', borderRadius: 2, border: '1px solid', borderColor: 'divider', mb: 1.5 }}>
                       <Box display="flex" gap={0.75} mb={1.25}>
                         {['JIRA', 'CONFLUENCE'].map(t => (
                           <Box
@@ -2013,9 +2019,9 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                             onClick={() => { setIntAddType(t); setIntInput(''); setIntError(''); }}
                             sx={{
                               px: 1.25, py: 0.4, borderRadius: 1.5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600,
-                              border: `1.5px solid ${intAddType === t ? '#0052cc' : '#e2e8f0'}`,
-                              bgcolor: intAddType === t ? '#eff6ff' : '#fff',
-                              color: intAddType === t ? '#0052cc' : 'text.secondary',
+                              border: `1.5px solid ${intAddType === t ? '#0052cc' : (isDark ? '#334155' : '#e2e8f0')}`,
+                              bgcolor: intAddType === t ? (isDark ? '#1e3a5f' : '#eff6ff') : 'transparent',
+                              color: intAddType === t ? (isDark ? '#93c5fd' : '#0052cc') : 'text.secondary',
                               transition: 'all 0.12s',
                             }}
                           >
@@ -2056,7 +2062,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                       <Typography variant="caption" fontWeight={700} sx={{ color: '#0052cc' }}>🔵 JIRA Tickets</Typography>
                       {integrationItems.filter(i => i.type === 'JIRA').length > 0 && (
                         <Chip label={integrationItems.filter(i => i.type === 'JIRA').length} size="small"
-                          sx={{ height: 16, fontSize: '0.6rem', bgcolor: '#dbeafe', color: '#1d4ed8', border: 0 }} />
+                          sx={{ height: 16, fontSize: '0.6rem', bgcolor: isDark ? '#1e3a5f' : '#dbeafe', color: isDark ? '#93c5fd' : '#1d4ed8', border: 0 }} />
                       )}
                     </Box>
                     <Button size="small" startIcon={<Add sx={{ fontSize: '13px !important' }} />}
@@ -2082,7 +2088,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                       <Typography variant="caption" fontWeight={700} sx={{ color: '#0077b6' }}>📄 Confluence Pages</Typography>
                       {integrationItems.filter(i => i.type !== 'JIRA').length > 0 && (
                         <Chip label={integrationItems.filter(i => i.type !== 'JIRA').length} size="small"
-                          sx={{ height: 16, fontSize: '0.6rem', bgcolor: '#bae6fd', color: '#0077b6', border: 0 }} />
+                          sx={{ height: 16, fontSize: '0.6rem', bgcolor: isDark ? '#0c4a6e' : '#bae6fd', color: isDark ? '#7dd3fc' : '#0077b6', border: 0 }} />
                       )}
                     </Box>
                     <Button size="small" startIcon={<Add sx={{ fontSize: '13px !important' }} />}
@@ -2140,7 +2146,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                     <Box display="flex" flexDirection="column" gap={1}>
                       {comments.map(c => (
                         editingCommentId === c.id ? (
-                          <Box key={c.id} sx={{ p: 1.5, borderRadius: 2, border: '1.5px solid #c7d2fe', bgcolor: '#fafbff' }}>
+                          <Box key={c.id} sx={{ p: 1.5, borderRadius: 2, border: `1.5px solid ${isDark ? '#4338ca' : '#c7d2fe'}`, bgcolor: isDark ? 'background.paper' : '#fafbff' }}>
                             <Box display="flex" alignItems="center" gap={1} mb={1}>
                               <Avatar sx={{ width: 24, height: 24, fontSize: '0.65rem', bgcolor: '#6366f1' }}>
                                 {c.user?.name?.charAt(0) || '?'}
@@ -2168,9 +2174,9 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                             onClick={() => setViewComment(c)}
                             sx={{
                               display: 'flex', alignItems: 'flex-start', gap: 1.25,
-                              p: 1.25, borderRadius: 2, border: '1px solid #e2e8f0',
+                              p: 1.25, borderRadius: 2, border: '1px solid', borderColor: isDark ? '#334155' : '#e2e8f0',
                               cursor: 'pointer',
-                              '&:hover': { borderColor: '#c7d2fe', bgcolor: '#fafbff' },
+                              '&:hover': { borderColor: isDark ? 'rgba(99,102,241,0.5)' : '#c7d2fe', bgcolor: isDark ? 'rgba(99,102,241,0.1)' : '#fafbff' },
                               '&:hover .note-delete-btn': { opacity: 1 },
                               transition: 'all 0.13s',
                             }}
@@ -2192,7 +2198,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                                           if (!window.confirm('Delete this note? This cannot be undone.')) return;
                                           await handleDeleteComment(c.id);
                                         }}
-                                        sx={{ opacity: 0, transition: 'opacity 0.15s', p: 0.25, color: '#94a3b8', '&:hover': { color: '#dc2626', bgcolor: '#fef2f2' } }}
+                                        sx={{ opacity: 0, transition: 'opacity 0.15s', p: 0.25, color: '#94a3b8', '&:hover': { color: '#dc2626', bgcolor: isDark ? 'rgba(220,38,38,0.12)' : '#fef2f2' } }}
                                       >
                                         <Delete sx={{ fontSize: 13 }} />
                                       </IconButton>
@@ -2216,31 +2222,29 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                 </Box>
 
                 {/* New comment input */}
-                <Box sx={{ borderTop: '1px solid #f1f5f9', pt: 2 }}>
-                  <RichEditor
-                    fullWidth
-                    multiline
-                    minRows={2}
-                    maxRows={5}
-                    size="small"
-                    placeholder="Add a note or comment… (Ctrl+Enter to send)"
-                    value={commentText}
-                    onChange={e => setCommentText(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleSendComment(); }}
-                    InputProps={{
-                      endAdornment: (
-                        <InputAdornment position="end" sx={{ alignSelf: 'flex-end', mb: 0.25 }}>
-                          <Tooltip title="Send (Ctrl+Enter)">
-                            <span>
-                              <IconButton size="small" onClick={handleSendComment} disabled={sendingComment || !commentText.trim()} color="primary">
-                                {sendingComment ? <CircularProgress size={14} /> : <Send sx={{ fontSize: 16 }} />}
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                        </InputAdornment>
-                      )
-                    }}
+                <Box sx={{ borderTop: '1px solid', borderTopColor: 'divider', pt: 2 }}>
+                  <TipTapEditor
+                    key={commentEditorKey}
+                    content={commentText}
+                    onChange={v => setCommentText(v)}
+                    placeholder="Add a note or comment…"
+                    minHeight={72}
+                    fontSize="0.875rem"
                   />
+                  <Box display="flex" justifyContent="flex-end" mt={1}>
+                    <Tooltip title="Send (Ctrl+Enter)">
+                      <span>
+                        <IconButton
+                          size="small"
+                          onClick={handleSendComment}
+                          disabled={sendingComment || !commentText.trim() || commentText === '<p></p>'}
+                          color="primary"
+                        >
+                          {sendingComment ? <CircularProgress size={14} /> : <Send sx={{ fontSize: 16 }} />}
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  </Box>
                 </Box>
               </Box>
             </TabPanel>
@@ -2260,7 +2264,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                       {idx < activity.length - 1 && (
                         <Box sx={{ position: 'absolute', left: 13, top: 28, bottom: -16, width: 1.5, bgcolor: '#e2e8f0' }} />
                       )}
-                      <Avatar sx={{ width: 28, height: 28, fontSize: '0.72rem', bgcolor: '#f1f5f9', color: '#64748b', flexShrink: 0, zIndex: 1 }}>
+                      <Avatar sx={{ width: 28, height: 28, fontSize: '0.72rem', bgcolor: isDark ? '#1e293b' : '#f1f5f9', color: isDark ? '#94a3b8' : '#64748b', flexShrink: 0, zIndex: 1 }}>
                         {log.user?.name?.charAt(0) || '?'}
                       </Avatar>
                       <Box flex={1} minWidth={0}>
@@ -2313,7 +2317,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                       setAddNoteError(null);
                       setAddNoteOpen(true);
                     }}
-                    sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', borderColor: '#c7d2fe', color: '#6366f1', '&:hover': { bgcolor: '#f0f0ff' } }}
+                    sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', borderColor: isDark ? '#4338ca' : '#c7d2fe', color: '#6366f1', '&:hover': { bgcolor: isDark ? 'rgba(99,102,241,0.12)' : '#f0f0ff' } }}
                   >
                     Add Note
                   </Button>
@@ -2371,14 +2375,14 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                           setEditNoteError(null);
                         }}
                         sx={{
-                          border: '1px solid #e2e8f0', borderRadius: 2, px: 2, py: 1.5,
+                          border: '1px solid', borderColor: isDark ? '#334155' : '#e2e8f0', borderRadius: 2, px: 2, py: 1.5,
                           cursor: 'pointer',
-                          '&:hover': { bgcolor: '#f8f7ff', borderColor: '#c7d2fe' },
+                          '&:hover': { bgcolor: isDark ? 'rgba(99,102,241,0.08)' : '#f8f7ff', borderColor: isDark ? 'rgba(99,102,241,0.4)' : '#c7d2fe' },
                           transition: 'all 0.15s',
                         }}
                       >
                         <Box display="flex" alignItems="flex-start" justifyContent="space-between" gap={1}>
-                          <Typography variant="body2" fontWeight={700} color="#1e293b" mb={0.4} sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{note.subject}</Typography>
+                          <Typography variant="body2" fontWeight={700} color="text.primary" mb={0.4} sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{note.subject}</Typography>
                           <Box display="flex" gap={0.25} sx={{ flexShrink: 0 }}>
                             <Tooltip title="Summarize this note">
                               <IconButton
@@ -2437,7 +2441,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                             <Tooltip title="Delete note permanently">
                               <IconButton
                                 size="small"
-                                sx={{ color: '#94a3b8', '&:hover': { color: '#dc2626', bgcolor: '#fef2f2' }, p: 0.25 }}
+                                sx={{ color: '#94a3b8', '&:hover': { color: '#dc2626', bgcolor: isDark ? 'rgba(220,38,38,0.12)' : '#fef2f2' }, p: 0.25 }}
                                 onClick={async (e) => {
                                   e.stopPropagation();
                                   if (!window.confirm(`Delete "${note.subject}"? This cannot be undone.`)) return;
@@ -2488,7 +2492,7 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
   return (
     <>
     {pageMode ? (
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', bgcolor: 'background.paper', borderRadius: 2, border: '1px solid #e2e8f0' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', bgcolor: 'background.paper', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
         {innerContent}
       </Box>
     ) : (
@@ -2501,8 +2505,10 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
             width: { xs: '100vw', sm: 480 },
             display: 'flex',
             flexDirection: 'column',
-            borderLeft: '1px solid #e2e8f0',
-            boxShadow: '-4px 0 32px rgba(0,0,0,0.1)',
+            borderLeft: '1px solid',
+            borderColor: 'divider',
+            boxShadow: '-4px 0 32px rgba(0,0,0,0.15)',
+            bgcolor: 'background.paper',
           }
         }}
       >
@@ -2770,9 +2776,9 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
       <DialogContent sx={{ pt: '4px !important' }}>
         <Box
           sx={{
-            bgcolor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 2,
+            bgcolor: isDark ? 'background.default' : '#f8fafc', border: '1px solid', borderColor: 'divider', borderRadius: 2,
             px: 2.5, py: 2, whiteSpace: 'pre-wrap', fontFamily: 'inherit',
-            fontSize: '0.875rem', lineHeight: 1.7, color: '#1e293b', maxHeight: '60vh', overflowY: 'auto',
+            fontSize: '0.875rem', lineHeight: 1.7, color: 'text.primary', maxHeight: '60vh', overflowY: 'auto',
           }}
         >
           {meetingSummaryText}

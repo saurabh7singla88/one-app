@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
-  Button, Box, Typography, CircularProgress
+  Button, Box, Typography, CircularProgress, useTheme
 } from '@mui/material';
 import { IosShare, ContentCopy, CheckCircleOutline } from '@mui/icons-material';
 import api from '../api/axios';
@@ -74,6 +74,8 @@ const countByStatus = (nodes) => {
 };
 
 export default function InitiativeSummaryDialog({ open, onClose, initiativeId, initiativeData }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [loading, setLoading] = useState(false);
   const [summaryText, setSummaryText] = useState('');
   const [copied, setCopied] = useState(false);
@@ -173,8 +175,10 @@ export default function InitiativeSummaryDialog({ open, onClose, initiativeId, i
               lineHeight: 1.65,
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
-              bgcolor: '#f8fafc',
-              border: '1px solid #e2e8f0',
+              bgcolor: isDark ? 'background.default' : '#f8fafc',
+              color: 'text.primary',
+              border: '1px solid',
+              borderColor: 'divider',
               borderRadius: 1.5,
               p: 2,
               m: 0,
