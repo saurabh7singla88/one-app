@@ -18,6 +18,7 @@ import integrationsRoutes from './routes/integrations.js';
 import syncRoutes from './routes/sync.js';
 import featuresRoutes from './routes/features.js';
 import bookmarksRoutes from './routes/bookmarks.js';
+import plannerRoutes from './routes/planner.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { prisma } from './lib/prisma.js';
 
@@ -57,6 +58,7 @@ app.use('/api/integrations', integrationsRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/features', featuresRoutes);
 app.use('/api/bookmarks', bookmarksRoutes);
+app.use('/api/planner', plannerRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

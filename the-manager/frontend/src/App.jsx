@@ -16,6 +16,7 @@ import AINewsletter from './pages/AINewsletter';
 import TeamBoard from './pages/TeamBoard';
 import Setup from './pages/Setup';
 import Help from './pages/Help';
+import Planner from './pages/Planner';
 import Layout from './components/Layout';
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
         <Route path="/initiatives/:id" element={<InitiativeDetail />} />
         <Route path="/mindmap" element={<MindMap />} />
         <Route path="/tasks" element={<Tasks />} />
+        <Route path="/planner" element={<Planner />} />
         <Route path="/bookmarks" element={<Bookmarks />} />
 
         <Route path="/notes" element={<Notes />} />

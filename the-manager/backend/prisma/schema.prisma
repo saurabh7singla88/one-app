@@ -42,6 +42,7 @@ model User {
   googleToken GoogleToken?
   bookmarkFolders BookmarkFolder[]
   bookmarks       Bookmark[]
+  plannerEntries  PlannerEntry[]
 
   @@map("users")
 }
@@ -100,6 +101,7 @@ model Initiative {
   comments    Comment[]
   activityLogs ActivityLog[]
   meetingNotes MeetingNote[]
+  plannerEntries PlannerEntry[]
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -355,4 +357,28 @@ model Bookmark {
   @@index([userId])
   @@index([folderId])
   @@map("bookmarks")
+}
+
+model PlannerEntry {
+  id           String   @id @default(uuid())
+  date         String   // YYYY-MM-DD
+  slot         String   // "FIRST_HALF" | "SECOND_HALF" | "09:00" | "10:00" etc.
+  position     Int      @default(0) // order within a slot
+  customTitle  String?  // free-text entry (no initiative link)
+  note         String?  // per-entry note
+
+  initiativeId String?
+  initiative   Initiative? @relation(fields: [initiativeId], references: [id], onDelete: SetNull)
+
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  dayNote      String?  // per-day free text journal note (stored on date+userId, slot="DAY_NOTE")
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId, date])
+  @@index([initiativeId])
+  @@map("planner_entries")
 }
