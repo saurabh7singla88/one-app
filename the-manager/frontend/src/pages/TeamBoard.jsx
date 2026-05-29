@@ -26,7 +26,7 @@ const ROLE_CONFIG = {
 const ROLE_ORDER = ['DEV', 'QA', 'PM', 'OTHER'];
 
 // ─── Feature flags ───────────────────────────────────────────────────────────
-const INSIGHTS_ENABLED = import.meta.env.ENABLE_MEMBER_INSIGHTS === 'true';
+const INSIGHTS_ENABLED = import.meta.env.VITE_ENABLE_MEMBER_INSIGHTS === 'true';
 
 // ─── Priority color mapping ──────────────────────────────────────────────────
 const PRIORITY_CONFIG = {
@@ -594,7 +594,7 @@ export default function TeamBoard() {
   const [sprints, setSprints] = useState([]);
   const [sprintsLoading, setSprintsLoading] = useState(false);
   const [sprintsError, setSprintsError] = useState('');
-  const [view, setView] = useState('table'); // 'table' | 'cards'
+  const [view, setView] = useState(() => localStorage.getItem('teamboard_view') || 'cards');
 
   // ── Team member roles (persisted in DB) ───────────────────────────────────
   const [memberRoles, setMemberRoles] = useState({}); // { [jiraName]: 'DEV'|'QA'|'PM'|'OTHER' }
@@ -898,7 +898,7 @@ export default function TeamBoard() {
             value={view}
             exclusive
             size="small"
-            onChange={(_, v) => { if (v) setView(v); }}
+            onChange={(_, v) => { if (v) { setView(v); try { localStorage.setItem('teamboard_view', v); } catch {} } }}
             sx={{ alignSelf: 'center', flexShrink: 0 }}
           >
             <ToggleButton value="table"><Tooltip title="Allocation table"><TableRows fontSize="small" /></Tooltip></ToggleButton>
@@ -1126,6 +1126,16 @@ export default function TeamBoard() {
 const PRIORITY_ORDER = { Highest: 0, High: 1, Medium: 2, Low: 3, Lowest: 4 };
 
 function AllocationTable({ team, memberRoles = {}, onRoleChange, onSummaryClick }) {
+  // Group rows by role for section headers
+  const grouped = useMemo(() => {
+    const buckets = Object.fromEntries([...ROLE_ORDER, 'UNTAGGED'].map(r => [r, []]));
+    team.forEach(member => {
+      const r = memberRoles[member.name];
+      buckets[r && buckets[r] ? r : 'UNTAGGED'].push(member);
+    });
+    return [...ROLE_ORDER, 'UNTAGGED'].filter(r => buckets[r].length > 0).map(r => ({ roleKey: r, members: buckets[r] }));
+  }, [team, memberRoles]);
+
   const rows = team.map(member => {
     const current = member.issues.filter(i => i.myRole === 'current');
     const past    = member.issues.filter(i => i.myRole === 'past');
@@ -1163,7 +1173,9 @@ function AllocationTable({ team, memberRoles = {}, onRoleChange, onSummaryClick 
       <Table size="small">
         <TableHead>
           <TableRow sx={{ bgcolor: '#f8fafc' }}>
-            <TableCell sx={{ fontWeight: 700, py: 1.5 }}>Team Member</TableCell>              <TableCell sx={{ fontWeight: 700 }}>Role</TableCell>            <TableCell align="center" sx={{ fontWeight: 700 }}>Assigned</TableCell>
+            <TableCell sx={{ fontWeight: 700, py: 1.5 }}>Team Member</TableCell>
+            <TableCell sx={{ fontWeight: 700 }}>Role</TableCell>
+            <TableCell align="center" sx={{ fontWeight: 700 }}>Assigned</TableCell>
             <TableCell align="center" sx={{ fontWeight: 700 }}>Previously</TableCell>
             <TableCell align="center" sx={{ fontWeight: 700 }}>Story Pts</TableCell>
             <TableCell sx={{ fontWeight: 700 }}>Priority Breakdown</TableCell>
@@ -1171,7 +1183,24 @@ function AllocationTable({ team, memberRoles = {}, onRoleChange, onSummaryClick 
           </TableRow>
         </TableHead>
         <TableBody>
-          {rows.map(row => (
+          {grouped.map(({ roleKey, members }) => {
+            const cfg  = roleKey === 'UNTAGGED' ? { label: 'Untagged', color: '#94a3b8', bg: '#f8fafc' } : ROLE_CONFIG[roleKey];
+            const meta = ROLE_SECTION_META[roleKey] || { icon: '•', label: roleKey };
+            const groupRows = rows.filter(r => members.some(m => m.name === r.name));
+            return [
+              <TableRow key={`hdr-${roleKey}`}>
+                <TableCell colSpan={7} sx={{ py: 0.75, px: 2, bgcolor: `${cfg.color}0d`, borderBottom: `2px solid ${cfg.color}30` }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography sx={{ fontSize: 13 }}>{meta.icon}</Typography>
+                    <Typography variant="caption" fontWeight={700} sx={{ color: cfg.color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      {meta.label}
+                    </Typography>
+                    <Chip label={members.length} size="small"
+                      sx={{ fontSize: 10, height: 18, fontWeight: 700, bgcolor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}40` }} />
+                  </Box>
+                </TableCell>
+              </TableRow>,
+              ...groupRows.map(row => (
             <TableRow key={row.name} hover sx={{ '&:last-child td': { border: 0 } }}>
               <TableCell>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -1260,7 +1289,9 @@ function AllocationTable({ team, memberRoles = {}, onRoleChange, onSummaryClick 
                 </Box>
               </TableCell>
             </TableRow>
-          ))}
+              ))
+            ];
+          })}
         </TableBody>
       </Table>
     </TableContainer>
