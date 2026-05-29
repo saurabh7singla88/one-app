@@ -16,7 +16,7 @@ import api from '../api/axios';
 import CanvasSelector from '../components/CanvasSelector';
 import { fetchCanvases } from '../features/canvas/canvasSlice';
 import RephraseTool from '../components/RephraseTool';
-import RichEditor from '../components/RichEditor';
+import TipTapEditor from '../components/TipTapEditor';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function timeAgo(iso) {
@@ -408,6 +408,11 @@ export default function Notes() {
   const [editorNote, setEditorNote] = useState(null);
   const [saveState, setSaveState] = useState('saved');
   const saveTimer = useRef(null);
+  const editorRef = useRef(null);
+  const openNoteSeq = useRef(0);
+  // Cache of decrypted content for protected notes — server GET /notes/:id always
+  // returns content:null for protected notes; this avoids a blank editor on re-navigation.
+  const unlockedNoteCache = useRef(new Map());
 
   // Delete confirm / creating
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -486,19 +491,40 @@ export default function Notes() {
     setExpandedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
   }, []);
 
-  // ── Open note ──────────────────────────────────────────────────────────────
+  // Keep cache in sync: whenever editorNote changes (including content edits) for a
+  // protected note, persist the latest full note object so re-navigation can use it.
+  useEffect(() => {
+    if (editorNote?.isProtected) {
+      unlockedNoteCache.current.set(editorNote.id, editorNote);
+    }
+  }, [editorNote]);
+
+  // ── Open note ──────────────────────────────────────────────────
   const openNote = useCallback(async (note) => {
     if (note.isProtected && !unlockedNoteIds.has(note.id)) {
       setUnlockTarget(note);
       return;
     }
+    // Protected notes: server GET returns content:null — use the in-session cache instead.
+    if (note.isProtected && unlockedNoteCache.current.has(note.id)) {
+      setSelectedId(note.id);
+      setSaveState('saved');
+      expandAncestors(note.id, allNotes);
+      setEditorNote(unlockedNoteCache.current.get(note.id));
+      return;
+    }
+    // Non-protected notes: fetch normally with stale-response guard.
+    const seq = ++openNoteSeq.current;
     setSelectedId(note.id);
     setSaveState('saved');
     expandAncestors(note.id, allNotes);
     try {
       const r = await api.get(`/notes/${note.id}`);
+      if (seq !== openNoteSeq.current) return; // stale — a newer openNote already fired
       setEditorNote(r.data);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      if (seq === openNoteSeq.current) console.error(e);
+    }
   }, [allNotes, expandAncestors, unlockedNoteIds]);
 
   // ── Create note (root when parentId=null, child otherwise) ─────────────────
@@ -838,17 +864,22 @@ export default function Notes() {
               {/* Body */}
               <Box sx={{ flex: 1, px: 3, pb: 3, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <Box sx={{ position: 'relative' }}>
-                  <RichEditor
-                    fullWidth multiline variant="standard" placeholder="Start writing…"
-                    value={editorNote.content} onChange={e => handleEditorChange('content', e.target.value)}
-                    minRows={8}
-                    InputProps={{ sx: { fontSize: '1rem', lineHeight: 1.8, alignItems: 'flex-start', px: 0 } }}
-                    sx={{ '& textarea': { resize: 'none' } }}
+                  <TipTapEditor
+                    ref={editorRef}
+                    key={editorNote.id}
+                    content={editorNote.content}
+                    onChange={v => handleEditorChange('content', v)}
+                    placeholder="Start writing…"
+                    minHeight={320}
+                    fontSize="1rem"
                   />
-                  <Box sx={{ position: 'absolute', bottom: 2, right: 0 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.75 }}>
                     <RephraseTool
-                      text={editorNote.content}
-                      onApply={v => handleEditorChange('content', v)}
+                      text={editorRef.current?.getText() ?? ''}
+                      onApply={v => {
+                        editorRef.current?.setContent(v);
+                        handleEditorChange('content', v);
+                      }}
                     />
                   </Box>
                 </Box>

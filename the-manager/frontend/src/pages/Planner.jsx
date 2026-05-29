@@ -18,6 +18,7 @@ import {
   SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import TipTapEditor from '../components/TipTapEditor';
 import api from '../api/axios';
 import { format, addDays, subDays, startOfWeek, parseISO, isToday, addWeeks } from 'date-fns';
 
@@ -667,13 +668,12 @@ function DailyView({ date, mode, slots }) {
             <Typography variant="caption" fontWeight={700} sx={{ display: 'block', mb: 0.75, color: 'text.secondary' }}>
               📝 Day Notes
             </Typography>
-            <TextField
-              multiline minRows={2} maxRows={6} fullWidth size="small"
-              placeholder="Jot down thoughts, blockers, or anything for the day..."
-              value={dayNote}
-              onChange={e => handleDayNoteChange(e.target.value)}
-              variant="standard"
-              InputProps={{ disableUnderline: true, sx: { fontSize: '0.85rem' } }}
+            <TipTapEditor
+              content={dayNote}
+              onChange={handleDayNoteChange}
+              placeholder="Jot down thoughts, blockers, or anything for the day…"
+              minHeight={80}
+              fontSize="0.85rem"
             />
           </Paper>
         </Box>
