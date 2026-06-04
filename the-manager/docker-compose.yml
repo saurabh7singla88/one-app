@@ -12,7 +12,7 @@ services:
         VITE_APP_AUTHOR: ${VITE_APP_AUTHOR:-Nebrix}
 
     ports:
-      - "3000:47421"
+      - "${APP_PORT:-3000}:47421"
     volumes:
       - db-data:/data
     environment:
