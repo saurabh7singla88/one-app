@@ -775,24 +775,19 @@ function GmailSection() {
               <li>Enable the <strong>Gmail API</strong> for your project</li>
               <li>Go to <em>APIs &amp; Services → Credentials → Create Credentials → OAuth client ID</em> — choose <strong>Web application</strong></li>
               <li>
-                Add the following as an <strong>Authorised redirect URI</strong> (add both if running locally):
-                <Box component="code" sx={{
-                  display:'block', mt:0.5, p:0.75, borderRadius:1,
-                  background: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
-                  fontFamily:'monospace', fontSize:'0.8rem', wordBreak:'break-all',
-                }}>
-                  {OAUTH_REDIRECT_URI}
-                </Box>
-                {OAUTH_REDIRECT_URI !== 'http://localhost:47421/api/gmail/oauth/callback' && (
-                  <Box component="code" sx={{
+                Add the following as <strong>Authorised redirect URIs</strong>:
+                {[
+                  'http://localhost:3000/api/gmail/oauth/callback',
+                  'http://localhost:3000',
+                ].filter((v, i, a) => a.indexOf(v) === i).map(uri => (
+                  <Box key={uri} component="code" sx={{
                     display:'block', mt:0.5, p:0.75, borderRadius:1,
                     background: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
                     fontFamily:'monospace', fontSize:'0.8rem', wordBreak:'break-all',
-                    color: 'text.secondary',
                   }}>
-                    http://localhost:47421/api/gmail/oauth/callback
+                    {uri}
                   </Box>
-                )}
+                ))}
               </li>
               <li>Go to <em>APIs &amp; Services → OAuth consent screen → Test users</em> and add your Google account email address</li>
               <li>Copy the <strong>Client ID</strong> and <strong>Client Secret</strong> below and click <em>Save Credentials</em></li>
