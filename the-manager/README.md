@@ -146,14 +146,17 @@ docker pull nebrix001/one-app:latest
 Create a `.env` file:
 
 ```env
-JWT_SECRET=                  # required — generate: openssl rand -hex 32
-TOKEN_ENCRYPTION_KEY=        # optional — generate: openssl rand -hex 16
+# required — generate: openssl rand -hex 32
+JWT_SECRET=                  
+# optional — generate: openssl rand -hex 16
+TOKEN_ENCRYPTION_KEY=        
 
 # Pick one database option:
-TURSO_DATABASE_URL=libsql://your-db.turso.io   # recommended (no volume needed)
+TURSO_DATABASE_URL=libsql://your-db.turso.io   
 TURSO_AUTH_TOKEN=your-turso-auth-token
 
-# DATABASE_URL=file:/data/app.db               # alternative: local SQLite
+# alternative: local SQLite
+# DATABASE_URL=file:/data/app.db               
 
 ALLOWED_ORIGINS=http://localhost:3000
 ```
