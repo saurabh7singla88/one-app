@@ -4,6 +4,10 @@ import { authenticate } from '../middleware/auth.js';
 import { encrypt, decrypt } from '../middleware/cipher.js';
 import logger from '../lib/logger.js';
 
+function safeEncrypt(value) {
+  return (process.env.TOKEN_ENCRYPTION_KEY?.length === 64) ? encrypt(value) : value;
+}
+
 const router = Router();
 router.use(authenticate);
 
@@ -90,8 +94,8 @@ router.put('/settings', async (req, res, next) => {
     if (apiToken) {
       upserts.push(prisma.userSetting.upsert({
         where: { userId_key: { userId, key: 'jira_api_token' } },
-        update: { value: encrypt(apiToken) },
-        create: { userId, key: 'jira_api_token', value: encrypt(apiToken) },
+        update: { value: safeEncrypt(apiToken) },
+        create: { userId, key: 'jira_api_token', value: safeEncrypt(apiToken) },
       }));
     }
 
