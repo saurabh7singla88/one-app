@@ -685,8 +685,17 @@ function MindMapInner() {
         markerEnd: { type: 'arrowclosed', width: 10, height: 10, color: '#c7d2fe' }
       }));
 
-    setNodes(rfNodes);
-    setEdges(rfEdges);
+    // Preserve any draft nodes that are currently live on the canvas.
+    // Without this, a position-save (updatePosition.fulfilled) or any other
+    // allItems change fires this effect and silently wipes the draft input.
+    setNodes(prev => {
+      const drafts = prev.filter(n => n.id.startsWith('draft-'));
+      return drafts.length ? [...rfNodes, ...drafts] : rfNodes;
+    });
+    setEdges(prev => {
+      const draftEdges = prev.filter(e => e.id.startsWith('e-draft-'));
+      return draftEdges.length ? [...rfEdges, ...draftEdges] : rfEdges;
+    });
   }, [selectedDisplayItems, collapsed, hiddenIds]);
 
   const onNodeDragStop = useCallback((_, node, draggedNodes) => {

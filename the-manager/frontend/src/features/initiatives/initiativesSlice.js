@@ -190,6 +190,11 @@ const initiativesSlice = createSlice({
       // Create
       .addCase(createInitiative.fulfilled, (state, action) => {
         state.items.unshift(action.payload);
+        // Also add to allItems so MindMap shows the node immediately without
+        // waiting for a follow-up fetchAllInitiatives round-trip.
+        if (!state.allItems.find(i => i.id === action.payload.id)) {
+          state.allItems.push(action.payload);
+        }
       })
       // Update
       .addCase(updateInitiative.fulfilled, (state, action) => {

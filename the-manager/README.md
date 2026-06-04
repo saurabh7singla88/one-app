@@ -4,6 +4,103 @@
 
 An AI-powered initiative tracker and strategic management tool for anyone who needs to stay on top of projects, tasks, notes, and meeting outcomes across multiple workspaces — with optional AI analysis, Gmail integration, and JIRA/Confluence connectivity.
 
+---
+
+## Getting Started
+
+Everything runs in a single Docker container — no Node.js or database install required on your machine.
+
+### Step 1 — Prerequisites
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
+- A free [Turso](https://turso.tech) account **or** a local folder for SQLite storage
+
+### Step 2 — Create a database
+
+**Option A — Turso (recommended, no volume management):**
+
+```bash
+# Install the Turso CLI then run:
+turso db create one-app
+turso db show one-app           # copy the URL (libsql://…)
+turso db tokens create one-app  # copy the auth token
+```
+
+**Option B — Local SQLite:** skip this step; you'll mount a folder in Step 3.
+
+### Step 3 — Create a `.env` file
+
+Create `.env` next to `docker-compose.yml` (or wherever you run the container):
+
+```env
+# ── Required ──────────────────────────────────────────────────────────────────
+JWT_SECRET=                    # generate: openssl rand -hex 32
+
+# ── Database — pick one ───────────────────────────────────────────────────────
+TURSO_DATABASE_URL=libsql://your-db.turso.io
+TURSO_AUTH_TOKEN=your-turso-auth-token
+# -- OR local SQLite:
+# DATABASE_URL=file:/data/app.db   (also add a volume mount — see docker-compose.yml)
+
+# ── Optional but recommended ──────────────────────────────────────────────────
+TOKEN_ENCRYPTION_KEY=          # generate: openssl rand -hex 32
+                               # encrypts stored Gmail / JIRA credentials at rest
+ALLOWED_ORIGINS=http://localhost:3000
+PUBLIC_URL=http://localhost:3000   # used for OAuth2 redirect URIs
+```
+
+Generate secrets in one go:
+
+```bash
+echo "JWT_SECRET=$(openssl rand -hex 32)"
+echo "TOKEN_ENCRYPTION_KEY=$(openssl rand -hex 32)"
+```
+
+### Step 4 — Start the app
+
+**From Docker Hub (quickest — no build step):**
+
+```bash
+docker run -d \
+  --name one-app \
+  -p 3000:47421 \
+  --env-file .env \
+  nebrix001/one-app:latest
+```
+
+**From source (docker-compose):**
+
+```bash
+docker compose up -d
+```
+
+Open **http://localhost:3000** in your browser.
+
+### Step 5 — Register your account
+
+Click **Register** on the login page. The first account you create becomes your primary account. No pre-seeded users exist.
+
+### Step 6 — Configure optional integrations (all in-app)
+
+Open **Setup** in the sidebar and configure any features you need:
+
+| Feature | Setup section | What you need |
+|---|---|---|
+| AI priority & summaries | **AI Model** | Pick Ollama (free, local) or paste an OpenAI / Gemini API key |
+| Meeting Notes from Gmail | **Gmail Integration** | Google OAuth2 client ID & secret (recommended) or a Gmail App Password |
+| JIRA / Confluence | **JIRA** | Your Atlassian base URL, email, and [API token](https://id.atlassian.com/manage-profile/security/api-tokens) |
+| Cloud sync across devices | **Sync** | Turso database URL & token (same as Step 2, or a second DB) |
+| Team Board, AI Newsletter | **Features** | Toggle on/off per feature |
+
+Features that aren't configured stay hidden — you won't see empty sections cluttering the sidebar.
+
+### Step 7 — Start working
+
+- **Initiatives** → create your first project, add tasks, set priorities
+- **Canvases** → group initiatives into colour-coded workspaces (e.g. Work, Personal)
+- **Notes** → rich-text notes with optional password protection
+- **Meeting Notes** → pull today's Gmail notes or enter them manually; AI extracts action items
+- **Mind Map** → visualise initiative hierarchies
 
 ---
 
