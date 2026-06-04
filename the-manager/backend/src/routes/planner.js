@@ -1,6 +1,7 @@
 import express from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
+import { decrypt } from '../middleware/cipher.js';
 import logger from '../lib/logger.js';
 
 const router = express.Router();
@@ -50,8 +51,8 @@ function buildRecommendation(sortedTasks, mode) {
   return entries;
 }
 
-async function loadAISettings() {
-  const rows = await prisma.appSetting.findMany({ where: { key: { startsWith: 'ai_' } } });
+async function loadAISettings(userId) {
+  const rows = await prisma.userSetting.findMany({ where: { userId, key: { startsWith: 'ai_' } } });
   const defaults = {
     ai_provider: process.env.AI_PROVIDER || 'ollama',
     ai_ollama_base_url: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
@@ -62,7 +63,10 @@ async function loadAISettings() {
     ai_gemini_model: 'gemini-1.5-flash',
     ai_gemini_api_key: '',
   };
-  for (const row of rows) defaults[row.key] = row.value;
+  for (const row of rows) {
+    defaults[row.key] = (row.key === 'ai_openai_api_key' || row.key === 'ai_gemini_api_key')
+      ? decrypt(row.value) : row.value;
+  }
   return defaults;
 }
 
@@ -363,7 +367,7 @@ ${tasks.map(t => `- ID: ${t.id} | "${t.title}" | Priority: ${t.priority} | Statu
 
 Please create an optimal daily plan.`;
 
-    const settings = await loadAISettings();
+    const settings = await loadAISettings(req.user.id);
     const { text, error } = await callLLM(settings, systemPrompt, userPrompt);
 
     if (error || !text) {

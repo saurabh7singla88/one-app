@@ -10,8 +10,8 @@ router.use(authenticate);
 const SETTING_KEYS = ['jira_base_url', 'jira_email', 'jira_api_token'];
 
 // ─── Load JIRA settings from DB ──────────────────────────────────────────────
-async function loadJiraSettings() {
-  const rows = await prisma.appSetting.findMany({ where: { key: { in: SETTING_KEYS } } });
+async function loadJiraSettings(userId) {
+  const rows = await prisma.userSetting.findMany({ where: { userId, key: { in: SETTING_KEYS } } });
   const map = {};
   for (const row of rows) {
     map[row.key] = row.key === 'jira_api_token' ? decrypt(row.value) : row.value;
@@ -52,7 +52,7 @@ function validateAtlassianBaseUrl(raw) {
 // ─── GET /api/jira/settings ───────────────────────────────────────────────────
 router.get('/settings', async (req, res, next) => {
   try {
-    const settings = await loadJiraSettings();
+    const settings = await loadJiraSettings(req.user.id);
     res.json({
       baseUrl:      settings['jira_base_url'] || '',
       email:        settings['jira_email'] || '',
@@ -67,36 +67,37 @@ router.get('/settings', async (req, res, next) => {
 router.put('/settings', async (req, res, next) => {
   try {
     const { baseUrl, email, apiToken } = req.body;
+    const userId = req.user.id;
 
     const upserts = [];
 
     if (baseUrl !== undefined) {
-      upserts.push(prisma.appSetting.upsert({
-        where: { key: 'jira_base_url' },
+      upserts.push(prisma.userSetting.upsert({
+        where: { userId_key: { userId, key: 'jira_base_url' } },
         update: { value: baseUrl.trim() },
-        create: { key: 'jira_base_url', value: baseUrl.trim() },
+        create: { userId, key: 'jira_base_url', value: baseUrl.trim() },
       }));
     }
 
     if (email !== undefined) {
-      upserts.push(prisma.appSetting.upsert({
-        where: { key: 'jira_email' },
+      upserts.push(prisma.userSetting.upsert({
+        where: { userId_key: { userId, key: 'jira_email' } },
         update: { value: email.trim() },
-        create: { key: 'jira_email', value: email.trim() },
+        create: { userId, key: 'jira_email', value: email.trim() },
       }));
     }
 
     if (apiToken) {
-      upserts.push(prisma.appSetting.upsert({
-        where: { key: 'jira_api_token' },
+      upserts.push(prisma.userSetting.upsert({
+        where: { userId_key: { userId, key: 'jira_api_token' } },
         update: { value: encrypt(apiToken) },
-        create: { key: 'jira_api_token', value: encrypt(apiToken) },
+        create: { userId, key: 'jira_api_token', value: encrypt(apiToken) },
       }));
     }
 
     await Promise.all(upserts);
 
-    const settings = await loadJiraSettings();
+    const settings = await loadJiraSettings(userId);
     res.json({
       baseUrl:      settings['jira_base_url'] || '',
       email:        settings['jira_email'] || '',
@@ -118,7 +119,7 @@ router.get('/fetch/:ticketKey', async (req, res, next) => {
       return res.status(400).json({ error: 'Invalid JIRA ticket key format. Expected format: PROJECT-123' });
     }
 
-    const settings = await loadJiraSettings();
+    const settings = await loadJiraSettings(req.user.id);
 
     if (!settings['jira_base_url'] || !settings['jira_email'] || !settings['jira_api_token']) {
       return res.status(400).json({ error: 'JIRA is not configured. Please set up JIRA credentials in Settings.' });
@@ -215,7 +216,7 @@ router.get('/confluence/fetch', async (req, res, next) => {
       return res.status(400).json({ error: 'Provide a Confluence page URL or page ID.' });
     }
 
-    const settings = await loadJiraSettings();
+    const settings = await loadJiraSettings(req.user.id);
     if (!settings['jira_base_url'] || !settings['jira_email'] || !settings['jira_api_token']) {
       return res.status(400).json({ error: 'JIRA/Confluence credentials are not configured. Set them up in Settings.' });
     }
@@ -323,7 +324,7 @@ router.get('/sprints', async (req, res, next) => {
       return res.status(400).json({ error: 'Project key is required.' });
     }
 
-    const settings = await loadJiraSettings();
+    const settings = await loadJiraSettings(req.user.id);
     if (!settings['jira_base_url'] || !settings['jira_email'] || !settings['jira_api_token']) {
       return res.status(400).json({ error: 'JIRA is not configured.' });
     }
@@ -413,7 +414,7 @@ router.get('/team', async (req, res, next) => {
       return res.status(400).json({ error: 'Invalid project key format.' });
     }
 
-    const settings = await loadJiraSettings();
+    const settings = await loadJiraSettings(req.user.id);
     if (!settings['jira_base_url'] || !settings['jira_email'] || !settings['jira_api_token']) {
       return res.status(400).json({ error: 'JIRA is not configured. Please set up JIRA credentials in Settings.' });
     }
@@ -614,9 +615,9 @@ router.get('/team', async (req, res, next) => {
 });
 
 // ─── AI helper for member summary ─────────────────────────────────────────────
-async function generateMemberAISummary(memberName, issues, confluencePages) {
+async function generateMemberAISummary(memberName, issues, confluencePages, userId) {
   try {
-    const rows = await prisma.appSetting.findMany({ where: { key: { startsWith: 'ai_' } } });
+    const rows = await prisma.userSetting.findMany({ where: { userId, key: { startsWith: 'ai_' } } });
     const s = {
       ai_provider: process.env.AI_PROVIDER || 'ollama',
       ai_ollama_base_url: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
@@ -624,7 +625,7 @@ async function generateMemberAISummary(memberName, issues, confluencePages) {
       ai_openai_base_url: 'https://api.openai.com', ai_openai_model: 'gpt-4o-mini',
       ai_openai_api_key: '', ai_gemini_model: 'gemini-1.5-flash', ai_gemini_api_key: '',
     };
-    rows.forEach(r => { s[r.key] = r.value; });
+    rows.forEach(r => { s[r.key] = (r.key === 'ai_openai_api_key' || r.key === 'ai_gemini_api_key') ? decrypt(r.value) : r.value; });
     const provider = s.ai_provider;
     if (provider === 'disabled') return null;
 
@@ -716,7 +717,7 @@ router.get('/member-summary', async (req, res, next) => {
       return res.status(400).json({ error: 'project and member query params are required' });
     }
 
-    const settings = await loadJiraSettings();
+    const settings = await loadJiraSettings(req.user.id);
     if (!settings['jira_base_url'] || !settings['jira_email'] || !settings['jira_api_token']) {
       return res.status(400).json({ error: 'JIRA credentials not configured.' });
     }
@@ -805,7 +806,7 @@ router.get('/member-summary', async (req, res, next) => {
     });
 
     // ── 5. AI summary (non-blocking — null if AI unavailable) ─────────────
-    const aiSummary = await generateMemberAISummary(member, issues, confluencePages);
+    const aiSummary = await generateMemberAISummary(member, issues, confluencePages, req.user.id);
 
     res.json({ member, accountId, issues, confluencePages, activityByDay, aiSummary });
   } catch (err) {

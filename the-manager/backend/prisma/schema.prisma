@@ -43,6 +43,7 @@ model User {
   bookmarkFolders BookmarkFolder[]
   bookmarks       Bookmark[]
   plannerEntries  PlannerEntry[]
+  userSettings    UserSetting[]
 
   @@map("users")
 }
@@ -381,4 +382,17 @@ model PlannerEntry {
   @@index([userId, date])
   @@index([initiativeId])
   @@map("planner_entries")
+}
+
+model UserSetting {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key       String
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, key])
+  @@index([userId])
+  @@map("user_settings")
 }

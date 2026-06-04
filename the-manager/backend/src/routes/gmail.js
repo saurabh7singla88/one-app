@@ -47,10 +47,11 @@ const SETTING_KEYS = [
   'gmail_oauth_token_expiry', 'gmail_oauth_email',
 ];
 
-async function loadGmailSettings() {
-  const rows = await prisma.appSetting.findMany({ where: { key: { in: SETTING_KEYS } } });
+async function loadGmailSettings(userId) {
+  const rows = await prisma.userSetting.findMany({ where: { userId, key: { in: SETTING_KEYS } } });
   const map  = Object.fromEntries(rows.map(r => [r.key, r.value]));
   return {
+    userId,
     authMethod:        map.gmail_auth_method          ?? null,
     user:              map.gmail_user                 ?? process.env.GMAIL_USER         ?? '',
     password:          map.gmail_app_password         ?? process.env.GMAIL_APP_PASSWORD ?? '',
@@ -91,15 +92,15 @@ async function getValidAccessToken(settings) {
   const newExpiry = String(credentials.expiry_date ?? now + 3_600_000);
 
   await Promise.all([
-    prisma.appSetting.upsert({
-      where:  { key: 'gmail_oauth_access_token' },
+    prisma.userSetting.upsert({
+      where:  { userId_key: { userId: settings.userId, key: 'gmail_oauth_access_token' } },
       update: { value: safeEncrypt(newToken) },
-      create: { key: 'gmail_oauth_access_token', value: safeEncrypt(newToken) },
+      create: { userId: settings.userId, key: 'gmail_oauth_access_token', value: safeEncrypt(newToken) },
     }),
-    prisma.appSetting.upsert({
-      where:  { key: 'gmail_oauth_token_expiry' },
+    prisma.userSetting.upsert({
+      where:  { userId_key: { userId: settings.userId, key: 'gmail_oauth_token_expiry' } },
       update: { value: newExpiry },
-      create: { key: 'gmail_oauth_token_expiry', value: newExpiry },
+      create: { userId: settings.userId, key: 'gmail_oauth_token_expiry', value: newExpiry },
     }),
   ]);
 
@@ -208,15 +209,25 @@ router.get('/oauth/callback', async (req, res) => {
     return res.redirect(`${frontend}/setup?oauth=error&message=Missing+code+or+state`);
   }
 
+  // Extract userId from state (format: "<randomHex>.<userId>")
+  const dotIdx = state.lastIndexOf('.');
+  if (dotIdx === -1) {
+    return res.redirect(`${frontend}/setup?oauth=error&message=Invalid+state+format`);
+  }
+  const userId = state.slice(dotIdx + 1);
+  if (!userId) {
+    return res.redirect(`${frontend}/setup?oauth=error&message=Missing+user+in+state`);
+  }
+
   try {
     // Verify CSRF state
-    const storedRow = await prisma.appSetting.findFirst({ where: { key: 'gmail_oauth_state' } });
+    const storedRow = await prisma.userSetting.findFirst({ where: { userId, key: 'gmail_oauth_state' } });
     if (!storedRow || storedRow.value !== state) {
       return res.redirect(`${frontend}/setup?oauth=error&message=Invalid+state+parameter`);
     }
-    await prisma.appSetting.deleteMany({ where: { key: 'gmail_oauth_state' } });
+    await prisma.userSetting.deleteMany({ where: { userId, key: 'gmail_oauth_state' } });
 
-    const settings = await loadGmailSettings();
+    const settings = await loadGmailSettings(userId);
     if (!settings.oauthClientId || !settings.oauthClientSecret) {
       return res.redirect(
         `${frontend}/setup?oauth=error&message=OAuth+client+credentials+not+found`
@@ -236,35 +247,35 @@ router.get('/oauth/callback', async (req, res) => {
     const email   = profile.data.emailAddress ?? '';
 
     const ops = [
-      prisma.appSetting.upsert({
-        where:  { key: 'gmail_oauth_access_token' },
+      prisma.userSetting.upsert({
+        where:  { userId_key: { userId, key: 'gmail_oauth_access_token' } },
         update: { value: safeEncrypt(tokens.access_token) },
-        create: { key: 'gmail_oauth_access_token', value: safeEncrypt(tokens.access_token) },
+        create: { userId, key: 'gmail_oauth_access_token', value: safeEncrypt(tokens.access_token) },
       }),
-      prisma.appSetting.upsert({
-        where:  { key: 'gmail_oauth_token_expiry' },
+      prisma.userSetting.upsert({
+        where:  { userId_key: { userId, key: 'gmail_oauth_token_expiry' } },
         update: { value: String(tokens.expiry_date ?? Date.now() + 3_600_000) },
-        create: { key: 'gmail_oauth_token_expiry', value: String(tokens.expiry_date ?? Date.now() + 3_600_000) },
+        create: { userId, key: 'gmail_oauth_token_expiry', value: String(tokens.expiry_date ?? Date.now() + 3_600_000) },
       }),
-      prisma.appSetting.upsert({
-        where:  { key: 'gmail_oauth_email' },
+      prisma.userSetting.upsert({
+        where:  { userId_key: { userId, key: 'gmail_oauth_email' } },
         update: { value: email },
-        create: { key: 'gmail_oauth_email', value: email },
+        create: { userId, key: 'gmail_oauth_email', value: email },
       }),
     ];
 
     if (tokens.refresh_token) {
       ops.push(
-        prisma.appSetting.upsert({
-          where:  { key: 'gmail_oauth_refresh_token' },
+        prisma.userSetting.upsert({
+          where:  { userId_key: { userId, key: 'gmail_oauth_refresh_token' } },
           update: { value: safeEncrypt(tokens.refresh_token) },
-          create: { key: 'gmail_oauth_refresh_token', value: safeEncrypt(tokens.refresh_token) },
+          create: { userId, key: 'gmail_oauth_refresh_token', value: safeEncrypt(tokens.refresh_token) },
         })
       );
     }
 
     await Promise.all(ops);
-    logger.info('Gmail OAuth2 connected', { email });
+    logger.info('Gmail OAuth2 connected', { email, userId });
 
     return res.redirect(
       `${frontend}/setup?oauth=success&email=${encodeURIComponent(email)}`
@@ -283,8 +294,8 @@ router.use(authenticate);
 // ── GET /api/gmail/settings ───────────────────────────────────────────────────
 router.get('/settings', async (req, res) => {
   try {
-    const s      = await loadGmailSettings();
-    const fromDB = !!(await prisma.appSetting.findFirst({ where: { key: 'gmail_user' } }));
+    const s      = await loadGmailSettings(req.user.id);
+    const fromDB = !!(await prisma.userSetting.findFirst({ where: { userId: req.user.id, key: 'gmail_user' } }));
     res.json({
       // App Password
       userSet:          !!s.user,
@@ -310,56 +321,57 @@ router.get('/settings', async (req, res) => {
 // ── PUT /api/gmail/settings ───────────────────────────────────────────────────
 router.put('/settings', async (req, res) => {
   const { user, appPassword, label, search, authMethod, clientId, clientSecret } = req.body;
+  const userId = req.user.id;
   try {
     const ops = [];
 
     if (authMethod !== undefined) {
-      ops.push(prisma.appSetting.upsert({
-        where:  { key: 'gmail_auth_method' },
+      ops.push(prisma.userSetting.upsert({
+        where:  { userId_key: { userId, key: 'gmail_auth_method' } },
         update: { value: authMethod },
-        create: { key: 'gmail_auth_method', value: authMethod },
+        create: { userId, key: 'gmail_auth_method', value: authMethod },
       }));
     }
     if (user !== undefined) {
-      ops.push(prisma.appSetting.upsert({
-        where:  { key: 'gmail_user' },
+      ops.push(prisma.userSetting.upsert({
+        where:  { userId_key: { userId, key: 'gmail_user' } },
         update: { value: user },
-        create: { key: 'gmail_user', value: user },
+        create: { userId, key: 'gmail_user', value: user },
       }));
     }
     if (appPassword !== undefined && appPassword !== '') {
-      ops.push(prisma.appSetting.upsert({
-        where:  { key: 'gmail_app_password' },
+      ops.push(prisma.userSetting.upsert({
+        where:  { userId_key: { userId, key: 'gmail_app_password' } },
         update: { value: safeEncrypt(appPassword) },
-        create: { key: 'gmail_app_password', value: safeEncrypt(appPassword) },
+        create: { userId, key: 'gmail_app_password', value: safeEncrypt(appPassword) },
       }));
     }
     if (label !== undefined) {
-      ops.push(prisma.appSetting.upsert({
-        where:  { key: 'gmail_label' },
+      ops.push(prisma.userSetting.upsert({
+        where:  { userId_key: { userId, key: 'gmail_label' } },
         update: { value: label },
-        create: { key: 'gmail_label', value: label },
+        create: { userId, key: 'gmail_label', value: label },
       }));
     }
     if (search !== undefined) {
-      ops.push(prisma.appSetting.upsert({
-        where:  { key: 'gmail_search' },
+      ops.push(prisma.userSetting.upsert({
+        where:  { userId_key: { userId, key: 'gmail_search' } },
         update: { value: search },
-        create: { key: 'gmail_search', value: search },
+        create: { userId, key: 'gmail_search', value: search },
       }));
     }
     if (clientId !== undefined) {
-      ops.push(prisma.appSetting.upsert({
-        where:  { key: 'gmail_oauth_client_id' },
+      ops.push(prisma.userSetting.upsert({
+        where:  { userId_key: { userId, key: 'gmail_oauth_client_id' } },
         update: { value: clientId },
-        create: { key: 'gmail_oauth_client_id', value: clientId },
+        create: { userId, key: 'gmail_oauth_client_id', value: clientId },
       }));
     }
     if (clientSecret !== undefined && clientSecret !== '') {
-      ops.push(prisma.appSetting.upsert({
-        where:  { key: 'gmail_oauth_client_secret' },
+      ops.push(prisma.userSetting.upsert({
+        where:  { userId_key: { userId, key: 'gmail_oauth_client_secret' } },
         update: { value: safeEncrypt(clientSecret) },
-        create: { key: 'gmail_oauth_client_secret', value: safeEncrypt(clientSecret) },
+        create: { userId, key: 'gmail_oauth_client_secret', value: safeEncrypt(clientSecret) },
       }));
     }
 
@@ -376,8 +388,8 @@ router.put('/settings', async (req, res) => {
 // ── DELETE /api/gmail/settings (App Password credentials only) ────────────────
 router.delete('/settings', async (req, res) => {
   try {
-    await prisma.appSetting.deleteMany({
-      where: { key: { in: ['gmail_user', 'gmail_app_password'] } },
+    await prisma.userSetting.deleteMany({
+      where: { userId: req.user.id, key: { in: ['gmail_user', 'gmail_app_password'] } },
     });
     logger.info('Gmail app-password credentials removed');
     res.json({ ok: true });
@@ -390,8 +402,9 @@ router.delete('/settings', async (req, res) => {
 // ── DELETE /api/gmail/oauth (OAuth2 credentials only) ────────────────────────
 router.delete('/oauth', async (req, res) => {
   try {
-    await prisma.appSetting.deleteMany({
+    await prisma.userSetting.deleteMany({
       where: {
+        userId: req.user.id,
         key: {
           in: [
             'gmail_oauth_client_id', 'gmail_oauth_client_secret',
@@ -412,16 +425,16 @@ router.delete('/oauth', async (req, res) => {
 // ── GET /api/gmail/oauth/auth-url ─────────────────────────────────────────────
 router.get('/oauth/auth-url', async (req, res) => {
   try {
-    const settings = await loadGmailSettings();
+    const settings = await loadGmailSettings(req.user.id);
     if (!settings.oauthClientId || !settings.oauthClientSecret) {
       return res.status(400).json({ error: 'Save Client ID and Client Secret first.' });
     }
 
-    const state = randomBytes(16).toString('hex');
-    await prisma.appSetting.upsert({
-      where:  { key: 'gmail_oauth_state' },
+    const state = `${randomBytes(16).toString('hex')}.${req.user.id}`;
+    await prisma.userSetting.upsert({
+      where:  { userId_key: { userId: req.user.id, key: 'gmail_oauth_state' } },
       update: { value: state },
-      create: { key: 'gmail_oauth_state', value: state },
+      create: { userId: req.user.id, key: 'gmail_oauth_state', value: state },
     });
 
     const oauth2Client = makeOAuth2Client({
@@ -444,7 +457,7 @@ router.get('/oauth/auth-url', async (req, res) => {
 
 // ── GET /api/gmail/test-config ────────────────────────────────────────────────
 router.get('/test-config', async (req, res) => {
-  const s = await loadGmailSettings();
+  const s = await loadGmailSettings(req.user.id);
 
   if (s.authMethod === 'oauth2') {
     if (!s.oauthRefreshToken) {
@@ -509,7 +522,7 @@ function makeClient({ user, password }) {
 
 // ── GET /api/gmail/meeting-notes ──────────────────────────────────────────────
 router.get('/meeting-notes', async (req, res, next) => {
-  const s          = await loadGmailSettings();
+  const s          = await loadGmailSettings(req.user.id);
   const dateParam  = req.query.date;
   const labelParam = req.query.label !== undefined ? req.query.label.trim() : s.label;
   const searchTerm = labelParam ? null : (req.query.search ?? s.search).toLowerCase();

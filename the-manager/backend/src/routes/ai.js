@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
+import { encrypt, decrypt } from '../middleware/cipher.js';
 import logger from '../lib/logger.js';
 
 const router = Router();
@@ -22,11 +23,21 @@ const DEFAULTS = {
 };
 
 // ─── Load AI settings from DB (falls back to env/defaults for missing keys) ───
-async function loadAISettings() {
-  const rows = await prisma.appSetting.findMany({ where: { key: { startsWith: 'ai_' } } });
+async function loadAISettings(userId) {
+  const rows = await prisma.userSetting.findMany({ where: { userId, key: { startsWith: 'ai_' } } });
   const map = { ...DEFAULTS };
-  for (const row of rows) map[row.key] = row.value;
+  for (const row of rows) {
+    map[row.key] = (row.key === 'ai_openai_api_key' || row.key === 'ai_gemini_api_key')
+      ? decrypt(row.value)
+      : row.value;
+  }
   return map;
+}
+
+// ─── Encrypt a value only when TOKEN_ENCRYPTION_KEY is configured ───────────
+function safeEncrypt(value) {
+  if (!value) return value;
+  return (process.env.TOKEN_ENCRYPTION_KEY?.length === 64) ? encrypt(value) : value;
 }
 
 // ─── Provider: Ollama ─────────────────────────────────────────────────────────
@@ -388,7 +399,7 @@ function scoreItem(item, childrenMap, llmMap) {
 // ─────────────────────────────────────────────
 router.get('/settings', async (req, res, next) => {
   try {
-    const s = await loadAISettings();
+    const s = await loadAISettings(req.user.id);
     const mask = (k) => k ? `${'•'.repeat(Math.max(0, k.length - 4))}${k.slice(-4)}` : '';
     res.json({
       provider: s.ai_provider,
@@ -411,6 +422,7 @@ router.get('/settings', async (req, res, next) => {
 router.put('/settings', async (req, res, next) => {
   try {
     const { provider, ollamaBaseUrl, ollamaModel, openaiBaseUrl, openaiModel, openaiApiKey, geminiModel, geminiApiKey } = req.body;
+    const userId = req.user.id;
     const updates = {};
     if (provider != null) updates.ai_provider = provider;
     if (ollamaBaseUrl != null) updates.ai_ollama_base_url = ollamaBaseUrl;
@@ -418,14 +430,14 @@ router.put('/settings', async (req, res, next) => {
     if (openaiBaseUrl != null) updates.ai_openai_base_url = openaiBaseUrl;
     if (openaiModel != null) updates.ai_openai_model = openaiModel;
     if (openaiApiKey != null && openaiApiKey !== '' && !openaiApiKey.startsWith('•'))
-      updates.ai_openai_api_key = openaiApiKey;
+      updates.ai_openai_api_key = safeEncrypt(openaiApiKey);
     if (geminiModel != null) updates.ai_gemini_model = geminiModel;
     if (geminiApiKey != null && geminiApiKey !== '' && !geminiApiKey.startsWith('•'))
-      updates.ai_gemini_api_key = geminiApiKey;
+      updates.ai_gemini_api_key = safeEncrypt(geminiApiKey);
 
     await Promise.all(
       Object.entries(updates).map(([key, value]) =>
-        prisma.appSetting.upsert({ where: { key }, update: { value }, create: { key, value } })
+        prisma.userSetting.upsert({ where: { userId_key: { userId, key } }, update: { value }, create: { userId, key, value } })
       )
     );
     res.json({ ok: true });
@@ -472,7 +484,7 @@ router.get('/suggestions', async (req, res, next) => {
     const childrenMap = {};
     for (const item of initiatives) childrenMap[item.id] = item.children || [];
 
-    const settings = await loadAISettings();
+    const settings = await loadAISettings(req.user.id);
     const { map: llmMap, provider: llmProvider } = await analyseWithLLM(initiatives, settings);
     const llmUsed = Object.keys(llmMap).length > 0;
 
@@ -602,7 +614,7 @@ router.post('/summarize-meetings', async (req, res, next) => {
     if (!Array.isArray(notes) || notes.length === 0)
       return res.status(400).json({ error: 'notes array required' });
 
-    const settings = await loadAISettings();
+    const settings = await loadAISettings(req.user.id);
     const provider = settings.ai_provider || 'ollama';
     if (provider === 'disabled') return res.json({ summary: null, provider: 'disabled' });
 
@@ -683,7 +695,7 @@ router.post('/rephrase', async (req, res, next) => {
     const { text, style = 'professional' } = req.body;
     if (!text || !text.trim()) return res.status(400).json({ error: 'text is required' });
 
-    const settings = await loadAISettings();
+    const settings = await loadAISettings(req.user.id);
     const provider = settings.ai_provider || 'ollama';
     if (provider === 'disabled') return res.status(503).json({ error: 'AI provider is disabled.' });
 
@@ -808,7 +820,7 @@ router.post('/status-report', async (req, res, next) => {
       `Critical priority open items: ${critical.length}`,
     ].join('\n');
 
-    const settings = await loadAISettings();
+    const settings = await loadAISettings(req.user.id);
     const provider = settings.ai_provider || 'ollama';
     if (provider === 'disabled') return res.status(503).json({ error: 'AI provider is disabled.' });
 
@@ -892,7 +904,7 @@ router.post('/action-items', async (req, res, next) => {
     const { subject, text, userName } = req.body;
     if (!text && !subject) return res.status(400).json({ error: 'text or subject required' });
 
-    const settings = await loadAISettings();
+    const settings = await loadAISettings(req.user.id);
     const result = await extractActionItems(
       text, subject, userName || req.user?.name || 'me', settings,
     );
@@ -1054,7 +1066,7 @@ router.post('/summarize-item', async (req, res, next) => {
     const { initiativeTitle, item, children = [], action = 'summarize' } = req.body;
     if (!item?.type) return res.status(400).json({ error: 'item with type is required' });
 
-    const settings = await loadAISettings();
+    const settings = await loadAISettings(req.user.id);
     const provider = settings.ai_provider || 'ollama';
     if (provider === 'disabled') return res.json({ summary: null, provider: 'disabled' });
 
@@ -1122,7 +1134,7 @@ router.post('/summarize-jira', async (req, res, next) => {
     if (!Array.isArray(tickets) || tickets.length === 0)
       return res.status(400).json({ error: 'tickets array required' });
 
-    const settings = await loadAISettings();
+    const settings = await loadAISettings(req.user.id);
     const provider = settings.ai_provider || 'ollama';
     if (provider === 'disabled') return res.json({ summary: null, provider: 'disabled' });
 
@@ -1197,7 +1209,7 @@ router.post('/action-on-items', async (req, res, next) => {
     if (!Array.isArray(items) || items.length === 0)
       return res.status(400).json({ error: 'items array required' });
 
-    const settings = await loadAISettings();
+    const settings = await loadAISettings(req.user.id);
     const provider = settings.ai_provider || 'ollama';
     if (provider === 'disabled') return res.json({ summary: null, provider: 'disabled' });
 
@@ -1262,7 +1274,7 @@ router.post('/chat-with-items', async (req, res, next) => {
     const { initiativeTitle, items = [], history = [], userMessage } = req.body;
     if (!userMessage?.trim()) return res.status(400).json({ error: 'userMessage is required' });
 
-    const settings = await loadAISettings();
+    const settings = await loadAISettings(req.user.id);
     const provider = settings.ai_provider || 'ollama';
     if (provider === 'disabled') return res.json({ response: null, provider: 'disabled' });
 
