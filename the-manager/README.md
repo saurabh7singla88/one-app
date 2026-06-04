@@ -47,6 +47,9 @@ TOKEN_ENCRYPTION_KEY=          # generate: openssl rand -hex 32
                                # encrypts stored Gmail / JIRA credentials at rest
 ALLOWED_ORIGINS=http://localhost:3000
 PUBLIC_URL=http://localhost:3000   # used for OAuth2 redirect URIs
+
+# ── Port (optional) ───────────────────────────────────────────────────────────
+APP_PORT=3000                  # host port the app is exposed on (default: 3000)
 ```
 
 Generate secrets in one go:
@@ -61,9 +64,26 @@ echo "TOKEN_ENCRYPTION_KEY=$(openssl rand -hex 32)"
 **From Docker Hub (quickest — no build step):**
 
 ```bash
+# Turso DB
 docker run -d \
   --name one-app \
   -p 3000:47421 \
+  --env-file .env \
+  nebrix001/one-app:latest
+
+# Local SQLite — mount a folder so data survives container restarts
+docker run -d \
+  --name one-app \
+  -p 3000:47421 \
+  -v "$(pwd)/data:/data" \
+  -e DATABASE_URL=file:/data/app.db \
+  --env-file .env \
+  nebrix001/one-app:latest
+
+# Custom port (e.g. 8080)
+docker run -d \
+  --name one-app \
+  -p 8080:47421 \
   --env-file .env \
   nebrix001/one-app:latest
 ```
@@ -164,9 +184,26 @@ ALLOWED_ORIGINS=http://localhost:3000
 Then run:
 
 ```bash
+# Turso DB
 docker run -d \
   --name one-app \
   -p 3000:47421 \
+  --env-file .env \
+  nebrix001/one-app:latest
+
+# Local SQLite — mount a folder so data survives container restarts
+docker run -d \
+  --name one-app \
+  -p 3000:47421 \
+  -v "$(pwd)/data:/data" \
+  -e DATABASE_URL=file:/data/app.db \
+  --env-file .env \
+  nebrix001/one-app:latest
+
+# Custom port (e.g. 8080)
+docker run -d \
+  --name one-app \
+  -p 8080:47421 \
   --env-file .env \
   nebrix001/one-app:latest
 ```
@@ -185,14 +222,25 @@ docker compose logs -f app  # tail logs
 
 Requires the same `.env` file alongside `docker-compose.yml`.
 
-For local SQLite, add to `docker-compose.yml`:
+**Local SQLite** — add a bind mount so data persists on your host machine:
 
 ```yaml
+# In docker-compose.yml under the app service:
 volumes:
   - ./data:/data
 environment:
   DATABASE_URL: file:/data/app.db
 ```
+
+Or simply create a `./data` folder and set `DATABASE_URL=file:/data/app.db` in your `.env`.
+
+**Custom port** — set `APP_PORT` in your `.env` (default `3000`):
+
+```env
+APP_PORT=8080
+```
+
+Then access the app at `http://localhost:8080`.
 
 ---
 
@@ -204,9 +252,10 @@ environment:
 | `TURSO_DATABASE_URL` | One of two | Turso / libsql URL, e.g. `libsql://your-db.turso.io` |
 | `TURSO_AUTH_TOKEN` | If using Turso | Auth token from Turso dashboard |
 | `DATABASE_URL` | One of two | Local SQLite path, e.g. `file:/data/app.db`. Mount a volume for persistence. |
-| `TOKEN_ENCRYPTION_KEY` | No | 64-char hex key for encrypting stored Gmail credentials. |
+| `TOKEN_ENCRYPTION_KEY` | No | 64-char hex key for encrypting stored Gmail / JIRA / AI credentials. |
 | `ALLOWED_ORIGINS` | No | CORS origins, default `http://localhost:3000` |
-| `PORT` | No | Internal port, default `47421` |
+| `APP_PORT` | No | Host port the app is exposed on, default `3000`. Set in `.env` alongside `docker-compose.yml`. |
+| `PORT` | No | Internal container port, default `47421`. No need to change this. |
 | `NODE_ENV` | No | Set to `production` for production deployments |
 
 > **Minimum required**: `JWT_SECRET` + one of `TURSO_DATABASE_URL` / `DATABASE_URL`.
