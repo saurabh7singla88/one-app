@@ -25,6 +25,9 @@ services:
       # Frontend is served by Express itself — allow same-origin requests from the mapped port.
       # For production deployments replace with your real domain.
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      # Externally-visible base URL used for OAuth2 redirect URIs.
+      # Must match what Google sees — i.e. the host:port your browser uses.
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"

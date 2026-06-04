@@ -2,7 +2,7 @@
   "name": "initiative-tracker-backend",
   "version": "1.0.0",
   "description": "Backend API for Initiative Tracker",
-  "author": "Saurabh Singla",
+  "author": "",
   "license": "MIT",
   "main": "src/server.js",
   "type": "module",
@@ -20,8 +20,6 @@
     "todo",
     "mindmap"
   ],
-  "author": "",
-  "license": "MIT",
   "dependencies": {
     "@libsql/client": "^0.17.3",
     "@prisma/adapter-libsql": "^7.8.0",
@@ -31,6 +29,7 @@
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "express-validator": "^7.0.1",
+    "googleapis": "^173.0.0",
     "imapflow": "^1.2.12",
     "jsonwebtoken": "^9.0.2",
     "mailparser": "^3.9.3"

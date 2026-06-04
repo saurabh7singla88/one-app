@@ -1,15 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTheme } from '@mui/material/styles';
 import {
   Box, Typography, Button, TextField, Select, MenuItem,
   FormControl, InputLabel, Divider, CircularProgress, Alert,
   InputAdornment, IconButton, Chip, Paper, Link, Switch, FormControlLabel,
+  Tabs, Tab,
 } from '@mui/material';
 import {
   SmartToy, Visibility, VisibilityOff, CheckCircle, Save,
   Email, CheckCircleOutline, ErrorOutline, Launch, BugReport,
   SyncAlt, CloudOff, FeedOutlined, Groups, ToggleOn, EventNote,
-  LockOutlined, LinkOff,
+  LockOutlined, LinkOff, VpnKey,
 } from '@mui/icons-material';
 import api from '../api/axios';
 
@@ -464,303 +466,405 @@ function AISection() {
 }
 
 // ─── Gmail Section ────────────────────────────────────────────────────────────
+const _apiBase = (() => {
+  const raw = import.meta.env.VITE_API_URL || 'http://localhost:47421/api';
+  return raw.replace(/\/api\/?$/, '');
+})();
+const OAUTH_REDIRECT_URI = `${_apiBase}/api/gmail/oauth/callback`;
+
 function GmailSection() {
-  const theme = useTheme();
+  const theme  = useTheme();
   const isDark = theme.palette.mode === 'dark';
-  const [loading, setLoading]           = useState(true);
-  const [saving, setSaving]             = useState(false);
-  const [saved, setSaved]               = useState(false);
-  const [testing, setTesting]           = useState(false);
-  const [testResult, setTestResult]     = useState(null);
-  const [error, setError]               = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // ── shared state ────────────────────────────────────────────────────────────
+  const [loading, setLoading]         = useState(true);
+  const [testing, setTesting]         = useState(false);
+  const [testResult, setTestResult]   = useState(null);
+  const [error, setError]             = useState('');
+  const [oauthCallbackMsg, setOauthCallbackMsg] = useState(null); // {ok, text}
+
+  const [status, setStatus] = useState({
+    userSet: false, passwordSet: false, user: '',
+    encrypted: false, source: 'none',
+    label: '', search: '',
+    authMethod: 'app_password',
+    oauthClientIdSet: false, oauthConnected: false, oauthEmail: '',
+  });
+
+  // ── auth-method tab ─────────────────────────────────────────────────────────
+  const [authMethod, setAuthMethod] = useState('oauth2');
+
+  // ── App Password state ───────────────────────────────────────────────────────
+  const [gmailUser, setGmailUser]         = useState('');
+  const [appPassword, setAppPassword]     = useState('');
+  const [showPassword, setShowPassword]   = useState(false);
+  const [saving, setSaving]               = useState(false);
+  const [saved, setSaved]                 = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
 
-  const [gmailUser, setGmailUser]     = useState('');
-  const [appPassword, setAppPassword] = useState('');
-  const [gmailLabel, setGmailLabel]   = useState('Gemini Notes');
-  const [gmailSearch, setGmailSearch] = useState('gemini');
-  const [status, setStatus] = useState({ userSet: false, passwordSet: false, source: 'none', user: '' });
 
-  useEffect(() => {
-    api.get('/gmail/settings')
-      .then(r => {
-        setStatus(r.data);
-        setGmailUser(r.data.user || '');
-        setGmailLabel(r.data.label || 'Gemini Notes');
-        setGmailSearch(r.data.search || 'gemini');
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+
+  // ── OAuth2 state ─────────────────────────────────────────────────────────────
+  const [clientId, setClientId]             = useState('');
+  const [clientSecret, setClientSecret]     = useState('');
+  const [showClientSecret, setShowClientSecret] = useState(false);
+  const [savingOAuth, setSavingOAuth]       = useState(false);
+  const [savedOAuth, setSavedOAuth]         = useState(false);
+  const [connectingOAuth, setConnectingOAuth] = useState(false);
+  const [disconnectingOAuth, setDisconnectingOAuth] = useState(false);
+
+  // ── load settings ────────────────────────────────────────────────────────────
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get('/gmail/settings');
+      setStatus(data);
+      setGmailUser(data.user || '');
+      const method = data.authMethod || 'oauth2';
+      setAuthMethod(method);
+    } catch { /* ignore */ }
+    setLoading(false);
   }, []);
 
-  const save = useCallback(async () => {
-    if (!gmailUser.trim()) { setError('Gmail address is required.'); return; }
-    if (!appPassword.trim() && !status.passwordSet) { setError('App Password is required.'); return; }
-    setSaving(true); setError(''); setSaved(false);
+  useEffect(() => { load(); }, [load]);
+
+  // ── handle OAuth2 callback redirect params ───────────────────────────────────
+  useEffect(() => {
+    const oauthResult = searchParams.get('oauth');
+    if (!oauthResult) return;
+    const email   = searchParams.get('email')   || '';
+    const message = searchParams.get('message') || '';
+    if (oauthResult === 'success') {
+      setOauthCallbackMsg({ ok: true, text: `Connected${email ? ` as ${email}` : ''}!` });
+      setAuthMethod('oauth2');
+      load();
+    } else {
+      setOauthCallbackMsg({ ok: false, text: message || 'OAuth2 connection failed.' });
+    }
+    // clear the query params without reload
+    const next = new URLSearchParams(searchParams);
+    next.delete('oauth'); next.delete('email'); next.delete('message');
+    setSearchParams(next, { replace: true });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── App Password – save ──────────────────────────────────────────────────────
+  const handleSave = async () => {
+    setSaving(true); setSaved(false); setError('');
     try {
-      const payload = {
-        user: gmailUser.trim(),
-        label: gmailLabel.trim() || 'Gemini Notes',
-        search: gmailSearch.trim() || 'gemini',
-      };
-      if (appPassword.trim()) payload.appPassword = appPassword.trim();
-      const r = await api.put('/gmail/settings', payload);
-      setSaved(true);
-      setStatus(s => ({ ...s, userSet: true, passwordSet: true, user: gmailUser.trim(), encrypted: r.data?.encrypted, source: 'db' }));
+      await api.put('/gmail/settings', {
+        user: gmailUser, appPassword: appPassword || undefined,
+        authMethod: 'app_password',
+      });
       setAppPassword('');
+      setSaved(true);
+      await load();
       setTimeout(() => setSaved(false), 3000);
     } catch (e) {
       setError(e.response?.data?.error || e.message);
-    } finally {
-      setSaving(false);
     }
-  }, [gmailUser, appPassword, gmailLabel, gmailSearch, status.passwordSet]);
+    setSaving(false);
+  };
 
-  const testConnection = useCallback(async () => {
-    setTesting(true);
-    setTestResult(null);
-    try {
-      const r = await api.get('/gmail/test-config');
-      setTestResult({ ok: true, user: r.data.user, encrypted: r.data.encrypted });
-    } catch (e) {
-      setTestResult({ ok: false, error: e.response?.data?.error || e.message });
-    } finally {
-      setTesting(false);
-    }
-  }, []);
-
-  const disconnect = useCallback(async () => {
+  // ── App Password – disconnect ────────────────────────────────────────────────
+  const handleDisconnect = async () => {
     setDisconnecting(true); setError('');
     try {
       await api.delete('/gmail/settings');
-      setStatus({ userSet: false, passwordSet: false, source: 'none', user: '' });
-      setGmailUser('');
-      setAppPassword('');
-      setTestResult(null);
+      await load();
+    } catch (e) { setError(e.response?.data?.error || e.message); }
+    setDisconnecting(false);
+  };
+
+  // ── OAuth2 – save credentials ────────────────────────────────────────────────
+  const saveOAuth = async () => {
+    setSavingOAuth(true); setSavedOAuth(false); setError('');
+    try {
+      await api.put('/gmail/settings', {
+        authMethod: 'oauth2',
+        clientId: clientId || undefined,
+        clientSecret: clientSecret || undefined,
+      });
+      setClientSecret('');
+      setSavedOAuth(true);
+      await load();
+      setTimeout(() => setSavedOAuth(false), 3000);
     } catch (e) {
       setError(e.response?.data?.error || e.message);
-    } finally {
-      setDisconnecting(false);
     }
-  }, []);
+    setSavingOAuth(false);
+  };
+
+  // ── OAuth2 – start Google consent flow ──────────────────────────────────────
+  const connectOAuth = async () => {
+    setConnectingOAuth(true); setError('');
+    try {
+      const { data } = await api.get('/gmail/oauth/auth-url');
+      window.location.href = data.url;
+    } catch (e) {
+      setError(e.response?.data?.error || e.message);
+      setConnectingOAuth(false);
+    }
+  };
+
+  // ── OAuth2 – disconnect ───────────────────────────────────────────────────────
+  const disconnectOAuth = async () => {
+    setDisconnectingOAuth(true); setError('');
+    try {
+      await api.delete('/gmail/oauth');
+      await load();
+    } catch (e) { setError(e.response?.data?.error || e.message); }
+    setDisconnectingOAuth(false);
+  };
+
+  // ── test connection ──────────────────────────────────────────────────────────
+  const handleTest = async () => {
+    setTesting(true); setTestResult(null);
+    try {
+      const { data } = await api.get('/gmail/test-config');
+      setTestResult({ ok: true, ...data });
+    } catch (e) {
+      setTestResult({ ok: false, error: e.response?.data?.error || e.message });
+    }
+    setTesting(false);
+  };
+
+  const canTest = authMethod === 'oauth2'
+    ? status.oauthConnected
+    : (status.userSet && status.passwordSet);
+
+  const cardBg   = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)';
+  const stepsBg  = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)';
+
+  if (loading) return <Box sx={{ display:'flex', justifyContent:'center', py:4 }}><CircularProgress size={24}/></Box>;
 
   return (
-    <Box display="flex" flexDirection="column" gap={3}>
+    <Box>
+      {/* OAuth callback banner */}
+      {oauthCallbackMsg && (
+        <Alert
+          severity={oauthCallbackMsg.ok ? 'success' : 'error'}
+          onClose={() => setOauthCallbackMsg(null)}
+          sx={{ mb:2, borderRadius:2 }}
+        >
+          {oauthCallbackMsg.text}
+        </Alert>
+      )}
 
-      {/* ── What is an App Password ── */}
-      <Alert
-        severity="info"
-        icon={<LockOutlined />}
-        sx={{ borderRadius: 2, '& .MuiAlert-message': { width: '100%' } }}
+      {/* Shared error banner */}
+      {error && (
+        <Alert severity="error" onClose={() => setError('')} sx={{ mb:2, borderRadius:2 }}>
+          {error}
+        </Alert>
+      )}
+
+      {/* Auth method tabs */}
+      <Tabs
+        value={authMethod}
+        onChange={(_, v) => { setAuthMethod(v); setTestResult(null); setError(''); }}
+        sx={{ mb:2 }}
       >
-        <Typography variant="body2" fontWeight={700} mb={0.5}>
-          This is not your Google Account password
-        </Typography>
-        <Typography variant="body2" sx={{ opacity: 0.9 }}>
-          An App Password is a 16-character access key generated separately in your Google Account.
-          Your main Google password is never entered here, and you can revoke this key at any time
-          from your Google Account security settings.
-        </Typography>
-      </Alert>
+        <Tab label="Google OAuth2 (Recommended)" value="oauth2" icon={<VpnKey sx={{ fontSize:16 }}/>} iconPosition="start" />
+        <Tab label="App Password" value="app_password" />
+      </Tabs>
 
-      {/* ── How-to steps — always visible ── */}
-      <Box sx={{ bgcolor: isDark ? 'background.default' : '#fafafa', border: '1px solid', borderColor: isDark ? '#334155' : '#e2e8f0', borderRadius: 2, px: 2.5, py: 2 }}>
-        <Typography variant="body2" fontWeight={700} mb={1.5} color="text.primary">
-          How to generate a Google App Password
-        </Typography>
-        {[
-          {
-            text: 'Enable 2-Step Verification on your Google Account (required first).',
-            href: 'https://myaccount.google.com/security',
-            linkLabel: 'Open Security settings',
-          },
-          {
-            text: 'Go to App Passwords and create one — name it "One" or similar. Google shows a 16-character code.',
-            href: 'https://myaccount.google.com/apppasswords',
-            linkLabel: 'Open App Passwords',
-          },
-          {
-            text: 'Paste the 16-character code into the field below and click Save.',
-          },
-        ].map((step, i) => (
-          <Box key={i} display="flex" gap={1.5} mb={i < 2 ? 1.25 : 0} alignItems="flex-start">
-            <Box
-              sx={{
-                width: 22, height: 22, borderRadius: '50%',
-                bgcolor: '#6366f1', color: '#fff', flexShrink: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '0.7rem', fontWeight: 700, mt: 0.15,
-              }}
-            >
-              {i + 1}
-            </Box>
-            <Typography variant="body2" color="text.secondary">
-              {step.text}
-              {step.href && (
-                <>
-                  {' '}
-                  <Button
-                    size="small" variant="text" endIcon={<Launch sx={{ fontSize: '0.75rem' }} />}
-                    href={step.href} target="_blank" rel="noopener"
-                    sx={{ textTransform: 'none', fontSize: '0.78rem', p: 0, minWidth: 0, verticalAlign: 'baseline', lineHeight: 'inherit' }}
-                  >
-                    {step.linkLabel}
-                  </Button>
-                </>
-              )}
+      {/* ── App Password tab ────────────────────────────────────────────── */}
+      {authMethod === 'app_password' && (
+        <Box>
+          <Alert severity="info" icon={<Email/>} sx={{ mb:2, borderRadius:2 }}>
+            Connect Gmail using an App Password. Requires 2-Step Verification and a Google App Password.
+          </Alert>
+
+          <Paper variant="outlined" sx={{ p:2, mb:2, background:stepsBg, borderRadius:2 }}>
+            <Typography variant="subtitle2" sx={{ mb:1, fontWeight:600 }}>How to get an App Password</Typography>
+            <Typography variant="body2" component="ol" sx={{ pl:2, m:0 }}>
+              <li>Enable 2-Step Verification on your Google account</li>
+              <li>Go to <Link href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">myaccount.google.com/apppasswords <Launch sx={{fontSize:11}}/></Link></li>
+              <li>Create a new App Password (select "Mail" or a custom name)</li>
+              <li>Copy the 16-character password and paste it below</li>
             </Typography>
-          </Box>
-        ))}
-      </Box>
+          </Paper>
 
-      {/* ── Credentials form ── */}
-      {loading ? (
-        <Box display="flex" justifyContent="center" py={2}><CircularProgress size={24} /></Box>
-      ) : (
-        <Box display="flex" flexDirection="column" gap={2}>
-          {status.userSet && status.passwordSet && (
-            <Alert severity="success" icon={<CheckCircleOutline />} sx={{ borderRadius: 2 }}>
-              Connected as <strong>{status.user}</strong>
-              {status.encrypted ? ' · encrypted ✓' : ''}
-              {status.source === 'env' ? ' (from .env)' : ''}
-            </Alert>
+          {status.userSet && (
+            <Box sx={{ display:'flex', alignItems:'center', gap:1, mb:2 }}>
+              <Chip icon={<CheckCircle/>} label={`Connected as ${status.user}`} color="success" size="small"/>
+              {status.encrypted && <Chip icon={<LockOutlined/>} label="Encrypted" color="primary" size="small" variant="outlined"/>}
+              <Chip label={status.source === 'db' ? 'Database' : 'Environment'} size="small" variant="outlined"/>
+            </Box>
           )}
 
           <TextField
-            label="Gmail address"
-            type="email"
-            size="small"
-            value={gmailUser}
-            onChange={e => setGmailUser(e.target.value)}
+            label="Gmail Address" fullWidth size="small" sx={{ mb:2 }}
+            value={gmailUser} onChange={e => setGmailUser(e.target.value)}
             placeholder="you@gmail.com"
-            fullWidth
-            autoComplete="new-password"
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+            autoComplete="username"
           />
-
           <TextField
-            label="App Password"
+            label="App Password" fullWidth size="small" sx={{ mb:2 }}
             type={showPassword ? 'text' : 'password'}
-            size="small"
-            value={appPassword}
-            onChange={e => setAppPassword(e.target.value)}
-            placeholder={status.passwordSet ? '••••••••••••••••  (leave blank to keep current)' : 'xxxx xxxx xxxx xxxx'}
-            fullWidth
+            value={appPassword} onChange={e => setAppPassword(e.target.value)}
+            placeholder={status.passwordSet ? '(saved — enter new to update)' : '16-character App Password'}
             autoComplete="new-password"
-            helperText="The 16-character code from Google — not your Google account password"
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">
-                  <IconButton size="small" onClick={() => setShowPassword(v => !v)} edge="end">
-                    {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                  <IconButton size="small" onClick={() => setShowPassword(p => !p)}>
+                    {showPassword ? <VisibilityOff/> : <Visibility/>}
                   </IconButton>
                 </InputAdornment>
               ),
             }}
           />
 
-          {/* Security assurance badges */}
-          <Box display="flex" gap={1} flexWrap="wrap">
-            {[
-              { icon: '🔒', label: 'AES-256 encrypted at rest' },
-              { icon: '📧', label: 'Read-only IMAP access' },
-              { icon: '🚫', label: 'Never logged or shared' },
-              { icon: '🔑', label: 'Revoke anytime from Google' },
-            ].map(b => (
-              <Chip
-                key={b.label}
-                label={`${b.icon}  ${b.label}`}
-                size="small"
-                sx={{ bgcolor: isDark ? 'rgba(16,185,129,0.12)' : '#f0fdf4', color: isDark ? '#6ee7b7' : '#166534', border: '1px solid', borderColor: isDark ? 'rgba(16,185,129,0.3)' : '#bbf7d0', fontWeight: 500, fontSize: '0.7rem' }}
-              />
-            ))}
-          </Box>
-
-          <Divider sx={{ my: 0.5 }} />
-
-          <TextField
-            label="Gmail Label"
-            size="small"
-            value={gmailLabel}
-            onChange={e => setGmailLabel(e.target.value)}
-            placeholder="Gemini Notes"
-            fullWidth
-            helperText="Gmail label to fetch emails from (e.g. Gemini Notes, INBOX)"
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
-          />
-
-          <TextField
-            label="Search Filter"
-            size="small"
-            value={gmailSearch}
-            onChange={e => setGmailSearch(e.target.value)}
-            placeholder="gemini"
-            fullWidth
-            helperText="Used when no label is set — filters by sender or subject"
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
-          />
-
-          {error && <Alert severity="error" sx={{ borderRadius: 2 }}>{error}</Alert>}
-
-          <Box display="flex" gap={1.5} alignItems="center" flexWrap="wrap">
+          <Box sx={{ display:'flex', gap:1, flexWrap:'wrap', mb:2 }}>
             <Button
-              variant="contained"
-              onClick={save}
-              disabled={saving || (!gmailUser.trim() && !appPassword.trim())}
-              startIcon={
-                saving ? <CircularProgress size={14} sx={{ color: 'inherit' }} />
-                : saved  ? <CheckCircle fontSize="small" />
-                : <Save fontSize="small" />
-              }
-              sx={{
-                borderRadius: 2, textTransform: 'none', fontWeight: 600,
-                bgcolor: saved ? 'success.main' : undefined,
-                '&:hover': { bgcolor: saved ? 'success.dark' : undefined },
-              }}
+              variant="contained" startIcon={saving ? <CircularProgress size={16}/> : <Save/>}
+              onClick={handleSave} disabled={saving || (!gmailUser && !status.userSet)}
             >
               {saving ? 'Saving…' : saved ? 'Saved!' : 'Save Credentials'}
             </Button>
 
             <Button
-              variant="outlined"
-              onClick={testConnection}
-              disabled={testing || (!status.userSet && !status.passwordSet)}
-              startIcon={
-                testing
-                  ? <CircularProgress size={14} />
-                  : testResult?.ok
-                    ? <CheckCircleOutline sx={{ color: 'success.main' }} />
-                    : <Email />
-              }
-              sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+              variant="outlined" color="info"
+              startIcon={testing ? <CircularProgress size={16}/> : <SyncAlt/>}
+              onClick={handleTest} disabled={testing || !canTest}
             >
               {testing ? 'Testing…' : 'Test Connection'}
             </Button>
 
-            {status.userSet && status.passwordSet && status.source !== 'env' && (
+            {status.userSet && (
               <Button
-                variant="outlined"
-                color="error"
-                onClick={disconnect}
-                disabled={disconnecting}
-                startIcon={disconnecting ? <CircularProgress size={14} /> : <LinkOff fontSize="small" />}
-                sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, ml: 'auto' }}
+                variant="outlined" color="error"
+                startIcon={disconnecting ? <CircularProgress size={16}/> : <LinkOff/>}
+                onClick={handleDisconnect} disabled={disconnecting}
               >
-                {disconnecting ? 'Disconnecting…' : 'Disconnect Gmail'}
+                {disconnecting ? 'Disconnecting…' : 'Disconnect'}
               </Button>
             )}
           </Box>
 
           {testResult && (
-            <Alert
-              severity={testResult.ok ? 'success' : 'error'}
-              icon={testResult.ok ? <CheckCircleOutline /> : <ErrorOutline />}
-              sx={{ borderRadius: 2 }}
-            >
+            <Alert severity={testResult.ok ? 'success' : 'error'} sx={{ borderRadius:2 }}>
               {testResult.ok
                 ? <>Connected as <strong>{testResult.user}</strong>{testResult.encrypted ? ' · encrypted ✓' : ''}</>
+                : testResult.error
+              }
+            </Alert>
+          )}
+        </Box>
+      )}
+
+      {/* ── OAuth2 tab ──────────────────────────────────────────────────── */}
+      {authMethod === 'oauth2' && (
+        <Box>
+          {status.oauthConnected && (
+            <Alert severity="success" icon={<CheckCircle/>} sx={{ mb:2, borderRadius:2 }}>
+              Connected as <strong>{status.oauthEmail || 'your Google account'}</strong>
+            </Alert>
+          )}
+
+          <Alert severity="info" icon={<VpnKey/>} sx={{ mb:2, borderRadius:2 }}>
+            Secure, read-only access via Google OAuth2 — uses the <code>gmail.readonly</code> scope.
+            Your credentials are never stored in plain text.
+          </Alert>
+
+          <Paper variant="outlined" sx={{ p:2, mb:2, background:stepsBg, borderRadius:2 }}>
+            <Typography variant="subtitle2" sx={{ mb:1, fontWeight:600 }}>Setup steps</Typography>
+            <Typography variant="body2" component="ol" sx={{ pl:2, m:0 }}>
+              <li>Open <Link href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console <Launch sx={{fontSize:11}}/></Link> and create or select a project</li>
+              <li>Enable the <strong>Gmail API</strong> for your project</li>
+              <li>Go to <em>APIs &amp; Services → Credentials → Create Credentials → OAuth client ID</em> — choose <strong>Web application</strong></li>
+              <li>
+                Add the following as an <strong>Authorised redirect URI</strong> (add both if running locally):
+                <Box component="code" sx={{
+                  display:'block', mt:0.5, p:0.75, borderRadius:1,
+                  background: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
+                  fontFamily:'monospace', fontSize:'0.8rem', wordBreak:'break-all',
+                }}>
+                  {OAUTH_REDIRECT_URI}
+                </Box>
+                {OAUTH_REDIRECT_URI !== 'http://localhost:47421/api/gmail/oauth/callback' && (
+                  <Box component="code" sx={{
+                    display:'block', mt:0.5, p:0.75, borderRadius:1,
+                    background: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
+                    fontFamily:'monospace', fontSize:'0.8rem', wordBreak:'break-all',
+                    color: 'text.secondary',
+                  }}>
+                    http://localhost:47421/api/gmail/oauth/callback
+                  </Box>
+                )}
+              </li>
+              <li>Go to <em>APIs &amp; Services → OAuth consent screen → Test users</em> and add your Google account email address</li>
+              <li>Copy the <strong>Client ID</strong> and <strong>Client Secret</strong> below and click <em>Save Credentials</em></li>
+              <li>Click <em>Connect with Google</em> to authorise access</li>
+            </Typography>
+          </Paper>
+
+          <TextField
+            label="Client ID" fullWidth size="small" sx={{ mb:2 }}
+            value={clientId} onChange={e => setClientId(e.target.value)}
+            placeholder={status.oauthClientIdSet ? '(saved — enter new to update)' : 'Paste your OAuth2 Client ID'}
+            autoComplete="off"
+            inputProps={{ autoComplete: 'off' }}
+          />
+          <TextField
+            label="Client Secret" fullWidth size="small" sx={{ mb:2 }}
+            type={showClientSecret ? 'text' : 'password'}
+            value={clientSecret} onChange={e => setClientSecret(e.target.value)}
+            placeholder="Paste your OAuth2 Client Secret"
+            autoComplete="new-password"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton size="small" onClick={() => setShowClientSecret(p => !p)}>
+                    {showClientSecret ? <VisibilityOff/> : <Visibility/>}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+          />
+
+          <Box sx={{ display:'flex', gap:1, flexWrap:'wrap', mb:2 }}>
+            <Button
+              variant="contained" startIcon={savingOAuth ? <CircularProgress size={16}/> : <Save/>}
+              onClick={saveOAuth}
+              disabled={savingOAuth || (!clientId && !status.oauthClientIdSet)}
+            >
+              {savingOAuth ? 'Saving…' : savedOAuth ? 'Saved!' : 'Save Credentials'}
+            </Button>
+
+            <Button
+              variant="contained" color="success"
+              startIcon={connectingOAuth ? <CircularProgress size={16}/> : <VpnKey/>}
+              onClick={connectOAuth}
+              disabled={connectingOAuth || !status.oauthClientIdSet}
+            >
+              {connectingOAuth ? 'Redirecting…' : status.oauthConnected ? 'Reconnect with Google' : 'Connect with Google'}
+            </Button>
+
+            {status.oauthConnected && (
+              <Button
+                variant="outlined" color="error"
+                startIcon={disconnectingOAuth ? <CircularProgress size={16}/> : <LinkOff/>}
+                onClick={disconnectOAuth} disabled={disconnectingOAuth}
+              >
+                {disconnectingOAuth ? 'Disconnecting…' : 'Disconnect OAuth2'}
+              </Button>
+            )}
+
+            <Button
+              variant="outlined" color="info"
+              startIcon={testing ? <CircularProgress size={16}/> : <SyncAlt/>}
+              onClick={handleTest} disabled={testing || !canTest}
+            >
+              {testing ? 'Testing…' : 'Test Connection'}
+            </Button>
+          </Box>
+
+          {testResult && (
+            <Alert severity={testResult.ok ? 'success' : 'error'} sx={{ borderRadius:2 }}>
+              {testResult.ok
+                ? <>Connected as <strong>{testResult.user}</strong> via {testResult.method === 'oauth2' ? 'OAuth2' : 'App Password'}</>
                 : testResult.error
               }
             </Alert>
@@ -770,7 +874,6 @@ function GmailSection() {
     </Box>
   );
 }
-
 
 // ─── JIRA Section ────────────────────────────────────────────────────────────
 function JiraSection() {
