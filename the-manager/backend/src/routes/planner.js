@@ -51,8 +51,12 @@ function buildRecommendation(sortedTasks, mode) {
   return entries;
 }
 
+const ENCRYPTED_SETTING_KEYS = new Set([
+  'ai_openai_api_key', 'ai_gemini_api_key',
+  'ai_bedrock_access_key_id', 'ai_bedrock_secret_key',
+]);
+
 async function loadAISettings(userId) {
-  const rows = await prisma.userSetting.findMany({ where: { userId, key: { startsWith: 'ai_' } } });
   const defaults = {
     ai_provider: process.env.AI_PROVIDER || 'ollama',
     ai_ollama_base_url: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
@@ -62,10 +66,20 @@ async function loadAISettings(userId) {
     ai_openai_api_key: '',
     ai_gemini_model: 'gemini-1.5-flash',
     ai_gemini_api_key: '',
+    ai_bedrock_region: 'us-east-1',
+    ai_bedrock_model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    ai_bedrock_access_key_id: '',
+    ai_bedrock_secret_key: '',
   };
+  // Layer 2: app-level defaults set by admin
+  const appRows = await prisma.appSetting.findMany({ where: { key: { startsWith: 'ai_' } } });
+  for (const row of appRows) {
+    defaults[row.key] = ENCRYPTED_SETTING_KEYS.has(row.key) ? decrypt(row.value) : row.value;
+  }
+  // Layer 3: per-user overrides (always win)
+  const rows = await prisma.userSetting.findMany({ where: { userId, key: { startsWith: 'ai_' } } });
   for (const row of rows) {
-    defaults[row.key] = (row.key === 'ai_openai_api_key' || row.key === 'ai_gemini_api_key')
-      ? decrypt(row.value) : row.value;
+    defaults[row.key] = ENCRYPTED_SETTING_KEYS.has(row.key) ? decrypt(row.value) : row.value;
   }
   return defaults;
 }
@@ -126,7 +140,27 @@ async function callLLM(settings, systemPrompt, userPrompt) {
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
       return { text, error: text ? null : 'Gemini returned empty response.' };
     }
-
+    if (provider === 'bedrock') {
+      if (!settings.ai_bedrock_access_key_id || !settings.ai_bedrock_secret_key)
+        return { text: null, error: 'AWS Bedrock credentials not configured.' };
+      const { BedrockRuntimeClient, ConverseCommand } = await import('@aws-sdk/client-bedrock-runtime');
+      const client = new BedrockRuntimeClient({
+        region: settings.ai_bedrock_region || 'us-east-1',
+        credentials: {
+          accessKeyId: settings.ai_bedrock_access_key_id,
+          secretAccessKey: settings.ai_bedrock_secret_key,
+        },
+      });
+      const cmd = new ConverseCommand({
+        modelId: settings.ai_bedrock_model || 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        system: [{ text: systemPrompt }],
+        messages: [{ role: 'user', content: [{ text: userPrompt }] }],
+        inferenceConfig: { maxTokens: 2048, temperature: 0.3 },
+      });
+      const resp = await client.send(cmd);
+      const text = resp.output?.message?.content?.[0]?.text?.trim() ?? null;
+      return { text, error: text ? null : 'Bedrock returned empty response.' };
+    }
     return { text: null, error: `Unknown AI provider: ${provider}` };
   } catch (e) {
     logger.error('LLM call failed in planner', e);

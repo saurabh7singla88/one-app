@@ -33,6 +33,9 @@ services:
       # Externally-visible base URL used for OAuth2 redirect URIs.
       # Must match what Google sees — i.e. the host:port your browser uses.
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+      # Admin panel credentials
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import AdminPage from './pages/AdminPage';
 import Dashboard from './pages/Dashboard';
 import InitiativesList from './pages/InitiativesList';
 import InitiativeDetail from './pages/InitiativeDetail';
@@ -26,6 +27,7 @@ function App() {
     <Routes>
       <Route path="/login" element={isAuthenticated ? <Navigate to="/" /> : <Login />} />
       <Route path="/register" element={isAuthenticated ? <Navigate to="/" /> : <Register />} />
+      <Route path="/admin" element={<AdminPage />} />
       
       <Route element={isAuthenticated ? <Layout /> : <Navigate to="/login" />}>
         <Route path="/" element={<Dashboard />} />

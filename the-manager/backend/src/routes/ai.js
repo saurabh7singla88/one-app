@@ -20,16 +20,30 @@ const DEFAULTS = {
   ai_openai_api_key: '',
   ai_gemini_model: 'gemini-1.5-flash',
   ai_gemini_api_key: '',
+  ai_bedrock_region: 'us-east-1',
+  ai_bedrock_model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+  ai_bedrock_access_key_id: '',
+  ai_bedrock_secret_key: '',
 };
 
-// ─── Load AI settings from DB (falls back to env/defaults for missing keys) ───
+// ─── Encrypted setting keys ───────────────────────────────────────────────────
+const ENCRYPTED_SETTING_KEYS = new Set([
+  'ai_openai_api_key', 'ai_gemini_api_key',
+  'ai_bedrock_access_key_id', 'ai_bedrock_secret_key',
+]);
+
+// ─── Load AI settings: env defaults → app-level (AppSetting) → user overrides ─
 async function loadAISettings(userId) {
-  const rows = await prisma.userSetting.findMany({ where: { userId, key: { startsWith: 'ai_' } } });
   const map = { ...DEFAULTS };
-  for (const row of rows) {
-    map[row.key] = (row.key === 'ai_openai_api_key' || row.key === 'ai_gemini_api_key')
-      ? decrypt(row.value)
-      : row.value;
+  // Layer 2: app-level defaults configured by admin
+  const appRows = await prisma.appSetting.findMany({ where: { key: { startsWith: 'ai_' } } });
+  for (const row of appRows) {
+    map[row.key] = ENCRYPTED_SETTING_KEYS.has(row.key) ? decrypt(row.value) : row.value;
+  }
+  // Layer 3: per-user overrides (always win)
+  const userRows = await prisma.userSetting.findMany({ where: { userId, key: { startsWith: 'ai_' } } });
+  for (const row of userRows) {
+    map[row.key] = ENCRYPTED_SETTING_KEYS.has(row.key) ? decrypt(row.value) : row.value;
   }
   return map;
 }
@@ -207,6 +221,39 @@ async function callGemini(settings, systemPrompt, userPrompt, schemaOverride = n
   return { error: 'Gemini did not respond after retries. It may be experiencing high demand — please try again shortly.' };
 }
 
+// ─── Provider: AWS Bedrock (Converse API) ─────────────────────────────────────
+// userPromptOrMessages: string (single-turn) or [{role, content:[{text}]}] array (multi-turn).
+async function callBedrock(settings, systemPrompt, userPromptOrMessages) {
+  if (!settings.ai_bedrock_access_key_id || !settings.ai_bedrock_secret_key) {
+    return { text: null, error: 'AWS Bedrock credentials not configured. Add them in Admin → AI Settings.' };
+  }
+  try {
+    const { BedrockRuntimeClient, ConverseCommand } = await import('@aws-sdk/client-bedrock-runtime');
+    const client = new BedrockRuntimeClient({
+      region: settings.ai_bedrock_region || 'us-east-1',
+      credentials: {
+        accessKeyId: settings.ai_bedrock_access_key_id,
+        secretAccessKey: settings.ai_bedrock_secret_key,
+      },
+    });
+    const messages = Array.isArray(userPromptOrMessages)
+      ? userPromptOrMessages
+      : [{ role: 'user', content: [{ text: userPromptOrMessages }] }];
+    const cmd = new ConverseCommand({
+      modelId: settings.ai_bedrock_model || 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+      system: [{ text: systemPrompt }],
+      messages,
+      inferenceConfig: { maxTokens: 4096, temperature: 0.1 },
+    });
+    const resp = await client.send(cmd);
+    const text = resp.output?.message?.content?.[0]?.text?.trim() ?? null;
+    return { text, error: text ? null : 'Bedrock returned an empty response.' };
+  } catch (e) {
+    logger.error('Bedrock call failed', { error: e.message, model: settings.ai_bedrock_model });
+    return { text: null, error: `Bedrock error: ${e.message}` };
+  }
+}
+
 // ─── LLM urgency analyser (provider-agnostic) ─────────────────────────────────
 async function analyseWithLLM(items, settings) {
   const provider = settings.ai_provider || 'ollama';
@@ -249,6 +296,10 @@ Be generous: if ANY urgency is implied or suggested, score it above 30.`;
     const r = await callGemini(settings, systemPrompt, userPrompt, null);
     rawText = r.text || null;
     if (r.error) logger.warn('Gemini urgency analysis failed', { error: r.error });
+  } else if (provider === 'bedrock') {
+    const r = await callBedrock(settings, systemPrompt, userPrompt);
+    rawText = r.text || null;
+    if (r.error) logger.warn('Bedrock urgency analysis failed', { error: r.error });
   }
 
   if (!rawText) {
@@ -412,6 +463,12 @@ router.get('/settings', async (req, res, next) => {
       geminiModel: s.ai_gemini_model,
       geminiApiKey: mask(s.ai_gemini_api_key),
       geminiApiKeySet: !!s.ai_gemini_api_key,
+      bedrockRegion: s.ai_bedrock_region,
+      bedrockModel: s.ai_bedrock_model,
+      bedrockAccessKeyId: mask(s.ai_bedrock_access_key_id),
+      bedrockAccessKeyIdSet: !!s.ai_bedrock_access_key_id,
+      bedrockSecretKey: mask(s.ai_bedrock_secret_key),
+      bedrockSecretKeySet: !!s.ai_bedrock_secret_key,
     });
   } catch (err) { next(err); }
 });
@@ -421,7 +478,7 @@ router.get('/settings', async (req, res, next) => {
 // ─────────────────────────────────────────────
 router.put('/settings', async (req, res, next) => {
   try {
-    const { provider, ollamaBaseUrl, ollamaModel, openaiBaseUrl, openaiModel, openaiApiKey, geminiModel, geminiApiKey } = req.body;
+    const { provider, ollamaBaseUrl, ollamaModel, openaiBaseUrl, openaiModel, openaiApiKey, geminiModel, geminiApiKey, bedrockRegion, bedrockModel, bedrockAccessKeyId, bedrockSecretKey } = req.body;
     const userId = req.user.id;
     const updates = {};
     if (provider != null) updates.ai_provider = provider;
@@ -434,6 +491,12 @@ router.put('/settings', async (req, res, next) => {
     if (geminiModel != null) updates.ai_gemini_model = geminiModel;
     if (geminiApiKey != null && geminiApiKey !== '' && !geminiApiKey.startsWith('•'))
       updates.ai_gemini_api_key = safeEncrypt(geminiApiKey);
+    if (bedrockRegion != null) updates.ai_bedrock_region = bedrockRegion;
+    if (bedrockModel != null) updates.ai_bedrock_model = bedrockModel;
+    if (bedrockAccessKeyId != null && bedrockAccessKeyId !== '' && !bedrockAccessKeyId.startsWith('•'))
+      updates.ai_bedrock_access_key_id = safeEncrypt(bedrockAccessKeyId);
+    if (bedrockSecretKey != null && bedrockSecretKey !== '' && !bedrockSecretKey.startsWith('•'))
+      updates.ai_bedrock_secret_key = safeEncrypt(bedrockSecretKey);
 
     await Promise.all(
       Object.entries(updates).map(([key, value]) =>
@@ -577,6 +640,10 @@ ${body}`;
     const result = await callGemini(settings, systemPrompt, userPrompt, ACTION_ITEMS_GEMINI_SCHEMA);
     if (result.error) llmError = result.error;
     else rawText = result.text;
+  } else if (provider === 'bedrock') {
+    const r = await callBedrock(settings, systemPrompt, userPrompt);
+    if (r.error) llmError = r.error;
+    else rawText = r.text;
   }
 
   if (!rawText) {
@@ -677,6 +744,10 @@ Be concise and factual. Omit sections that have no relevant content.`;
       const r = await callGemini(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
+    } else if (provider === 'bedrock') {
+      const r = await callBedrock(settings, systemPrompt, userPrompt);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
     }
 
     if (!rawText)
@@ -721,6 +792,10 @@ router.post('/rephrase', async (req, res, next) => {
     } else if (provider === 'gemini') {
       // Give rephrase calls a longer per-attempt timeout (60 s) so retries have room to succeed
       const r = await callGemini(settings, systemPrompt, userPrompt, false, 60_000);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
+    } else if (provider === 'bedrock') {
+      const r = await callBedrock(settings, systemPrompt, userPrompt);
       if (r.error) llmError = r.error;
       else rawText = r.text;
     }
@@ -871,6 +946,10 @@ ${metrics}`;
       else rawText = r.text;
     } else if (provider === 'gemini') {
       const r = await callGemini(settings, systemPrompt, userPrompt, false);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
+    } else if (provider === 'bedrock') {
+      const r = await callBedrock(settings, systemPrompt, userPrompt);
       if (r.error) llmError = r.error;
       else rawText = r.text;
     }
@@ -1115,6 +1194,10 @@ router.post('/summarize-item', async (req, res, next) => {
       const r = await callGemini(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
+    } else if (provider === 'bedrock') {
+      const r = await callBedrock(settings, systemPrompt, userPrompt);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
     }
 
     if (!rawText)
@@ -1190,6 +1273,10 @@ Be concise and factual. Only include sections with relevant content.`;
       const r = await callGemini(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
+    } else if (provider === 'bedrock') {
+      const r = await callBedrock(settings, systemPrompt, userPrompt);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
     }
 
     if (!rawText)
@@ -1253,6 +1340,10 @@ router.post('/action-on-items', async (req, res, next) => {
       else rawText = r.text;
     } else if (provider === 'gemini') {
       const r = await callGemini(settings, systemPrompt, userPrompt, false);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
+    } else if (provider === 'bedrock') {
+      const r = await callBedrock(settings, systemPrompt, userPrompt);
       if (r.error) llmError = r.error;
       else rawText = r.text;
     }
@@ -1376,6 +1467,14 @@ GUIDELINES:
         ? `${historyBlock}User: ${userMessage.trim()}`
         : userMessage.trim();
       const r = await callGemini(settings, systemPrompt, geminiPrompt, false);
+      if (r.error) llmError = r.error;
+      else rawText = r.text;
+    } else if (provider === 'bedrock') {
+      const bedrockMessages = [
+        ...history.map(m => ({ role: m.role, content: [{ text: m.content }] })),
+        { role: 'user', content: [{ text: userMessage.trim() }] },
+      ];
+      const r = await callBedrock(settings, systemPrompt, bedrockMessages);
       if (r.error) llmError = r.error;
       else rawText = r.text;
     }
