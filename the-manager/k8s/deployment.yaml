@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: the-manager
+  namespace: the-manager
+  labels:
+    app: the-manager
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: the-manager
+  template:
+    metadata:
+      labels:
+        app: the-manager
+    spec:
+      containers:
+        - name: the-manager
+          image: IMAGE_URI  # replaced by deploy.sh
+          ports:
+            - containerPort: 47421
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "47421"
+            - name: ALLOWED_ORIGINS
+              value: "https://themanager.example.com"  # update to your domain
+            - name: PUBLIC_URL
+              value: "https://themanager.example.com"  # update to your domain
+            - name: TURSO_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: the-manager-secrets
+                  key: TURSO_DATABASE_URL
+            - name: TURSO_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: the-manager-secrets
+                  key: TURSO_AUTH_TOKEN
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: the-manager-secrets
+                  key: JWT_SECRET
+            - name: TOKEN_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: the-manager-secrets
+                  key: TOKEN_ENCRYPTION_KEY
+                  optional: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 47421
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 47421
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: the-manager

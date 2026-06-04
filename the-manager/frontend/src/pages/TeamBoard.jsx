@@ -5,7 +5,7 @@ import {
   LinearProgress, Divider, Link, Select, MenuItem, FormControl,
   InputLabel, Card, CardContent, Stack, Drawer, Skeleton,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  ToggleButtonGroup, ToggleButton,
+  ToggleButtonGroup, ToggleButton, useTheme,
 } from '@mui/material';
 import {
   Groups, ExpandMore, ExpandLess, OpenInNew, Refresh,
@@ -18,10 +18,10 @@ import api from '../api/axios';
 
 // ─── Role config ─────────────────────────────────────────────────────────────
 const ROLE_CONFIG = {
-  DEV:   { label: 'Dev',   color: '#3b82f6', bg: '#eff6ff' },
-  QA:    { label: 'QA',    color: '#7c3aed', bg: '#f5f3ff' },
-  PM:    { label: 'PM',    color: '#0891b2', bg: '#f0f9ff' },
-  OTHER: { label: 'Other', color: '#64748b', bg: '#f8fafc' },
+  DEV:   { label: 'Dev',   color: '#3b82f6', bg: 'rgba(59,130,246,0.12)' },
+  QA:    { label: 'QA',    color: '#7c3aed', bg: 'rgba(124,58,237,0.12)' },
+  PM:    { label: 'PM',    color: '#0891b2', bg: 'rgba(8,145,178,0.12)' },
+  OTHER: { label: 'Other', color: '#64748b', bg: 'rgba(100,116,139,0.12)' },
 };
 const ROLE_ORDER = ['DEV', 'QA', 'PM', 'OTHER'];
 
@@ -59,6 +59,7 @@ function IssueTypeIcon({ type }) {
 
 // ─── Single Issue Row ────────────────────────────────────────────────────────
 function IssueRow({ issue }) {
+  const theme = useTheme();
   const priorityCfg = PRIORITY_CONFIG[issue.priority] || { color: '#757575', icon: <Circle sx={{ fontSize: 8 }} /> };
   const statusColor = getStatusColor(issue.statusCategory);
   const isPast = issue.myRole === 'past';
@@ -68,8 +69,8 @@ function IssueRow({ issue }) {
       sx={{
         display: 'flex', alignItems: 'center', gap: 1.5, py: 1, px: 1.5,
         borderRadius: 1.5,
-        '&:hover': { bgcolor: 'rgba(0,0,0,0.02)' },
-        borderBottom: '1px solid #f0f0f0',
+        '&:hover': { bgcolor: 'action.hover' },
+        borderBottom: `1px solid ${theme.palette.divider}`,
         opacity: isPast ? 0.72 : 1,
       }}
     >
@@ -99,7 +100,7 @@ function IssueRow({ issue }) {
           <Chip
             label="Past"
             size="small"
-            sx={{ fontSize: 10, height: 18, bgcolor: '#f3e5f5', color: '#7b1fa2', border: '1px solid #ce93d8', cursor: 'default' }}
+            sx={{ fontSize: 10, height: 18, bgcolor: 'rgba(123,31,162,0.12)', color: '#9c27b0', border: '1px solid rgba(123,31,162,0.3)', cursor: 'default' }}
           />
         </Tooltip>
       )}
@@ -123,6 +124,7 @@ function IssueRow({ issue }) {
 // ─── Team Member Card ────────────────────────────────────────────────────────
 function MemberCard({ member, role, onRoleChange, onSummaryClick }) {
   const [expanded, setExpanded] = useState(true);
+  const theme = useTheme();
   const roleCfg = role ? ROLE_CONFIG[role] : null;
 
   const currentIssues = member.issues.filter(i => i.myRole === 'current');
@@ -133,7 +135,7 @@ function MemberCard({ member, role, onRoleChange, onSummaryClick }) {
   const todo       = currentIssues.filter(i => i.statusCategory !== 'In Progress' && i.statusCategory !== 'Done').length;
 
   return (
-    <Card elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: 3, mb: 2 }}>
+    <Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 3, mb: 2 }}>
       <CardContent sx={{ pb: expanded ? 0 : 2, '&:last-child': { pb: expanded ? 1 : 2 } }}>
         {/* Member Header */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -213,10 +215,10 @@ function MemberCard({ member, role, onRoleChange, onSummaryClick }) {
 
           {/* Insights icon — rightmost, visually separated */}
           {onSummaryClick && member.name !== 'Unassigned' && (
-            <Box sx={{ borderLeft: '1px solid #e2e8f0', pl: 0.75, ml: 0.25, display: 'flex', alignItems: 'center' }}>
+            <Box sx={{ borderLeft: '1px solid', borderColor: 'divider', pl: 0.75, ml: 0.25, display: 'flex', alignItems: 'center' }}>
               <Tooltip title="Member Insights" arrow>
                 <IconButton size="small" onClick={() => onSummaryClick(member.name, member.avatar)}
-                  sx={{ color: '#6366f1', '&:hover': { bgcolor: '#ede9fe' } }}>
+                  sx={{ color: '#6366f1', '&:hover': { bgcolor: 'rgba(99,102,241,0.12)' } }}>
                   <InsightsOutlined sx={{ fontSize: 17 }} />
                 </IconButton>
               </Tooltip>
@@ -227,7 +229,7 @@ function MemberCard({ member, role, onRoleChange, onSummaryClick }) {
         {/* Progress Bar — based on current assignments only */}
         {currentIssues.length > 0 && (
           <Box sx={{ mt: 1.5 }}>
-            <Box sx={{ display: 'flex', height: 4, borderRadius: 2, overflow: 'hidden', bgcolor: '#f5f5f5' }}>
+            <Box sx={{ display: 'flex', height: 4, borderRadius: 2, overflow: 'hidden', bgcolor: 'action.disabledBackground' }}>
               <Box sx={{ width: `${(done / currentIssues.length) * 100}%`, bgcolor: '#2e7d32' }} />
               <Box sx={{ width: `${(inProgress / currentIssues.length) * 100}%`, bgcolor: '#1976d2' }} />
               <Box sx={{ width: `${(todo / currentIssues.length) * 100}%`, bgcolor: '#bdbdbd' }} />
@@ -270,7 +272,7 @@ const ROLE_SECTION_META = {
 function RoleSection({ roleKey, members, memberRoles, onRoleChange, onSummaryClick }) {
   const [open, setOpen] = useState(true);
   if (members.length === 0) return null;
-  const cfg = roleKey === 'UNTAGGED' ? { label: 'Untagged', color: '#94a3b8', bg: '#f8fafc' } : ROLE_CONFIG[roleKey];
+  const cfg = roleKey === 'UNTAGGED' ? { label: 'Untagged', color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' } : ROLE_CONFIG[roleKey];
   const meta = ROLE_SECTION_META[roleKey] || { label: roleKey, icon: '•' };
   const totalTickets = members.reduce((s, m) => s + m.issueCount, 0);
   const totalSP = members.reduce((s, m) => s + m.totalStoryPoints, 0);
@@ -317,8 +319,9 @@ const WORKLOAD_STYLE = {
 };
 
 function HeatCell({ day, maxVal }) {
+  const theme = useTheme();
   const pct = maxVal > 0 ? day.total / maxVal : 0;
-  const bg = pct === 0 ? '#f1f5f9'
+  const bg = pct === 0 ? theme.palette.action.selected
     : pct <= 0.33 ? '#c7d2fe'
     : pct <= 0.66 ? '#818cf8'
     : '#4338ca';
@@ -341,6 +344,7 @@ function HeatCell({ day, maxVal }) {
 }
 
 function MemberSummaryDrawer({ open, memberName, memberAvatar, project, onClose }) {
+  const theme = useTheme();
   const [loading, setLoading] = useState(false);
   const [data, setData]       = useState(null);
   const [error, setError]     = useState('');
@@ -379,10 +383,10 @@ function MemberSummaryDrawer({ open, memberName, memberAvatar, project, onClose 
       PaperProps={{ sx: { width: { xs: '100vw', sm: 500 }, display: 'flex', flexDirection: 'column' } }}
     >
       {/* ── Header ── */}
-      <Box sx={{ flexShrink: 0, borderBottom: '1px solid #e2e8f0' }}>
+      <Box sx={{ flexShrink: 0, borderBottom: '1px solid', borderBottomColor: 'divider' }}>
         <Box sx={{ px: 2.5, pt: 2, pb: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <InsightsOutlined sx={{ fontSize: 20, color: '#6366f1' }} />
-          <Typography variant="h6" fontWeight={700} sx={{ flex: 1, color: '#1e293b' }}>
+          <Typography variant="h6" fontWeight={700} sx={{ flex: 1 }}>
             Member Insights
           </Typography>
           <IconButton onClick={onClose} size="small"><Close /></IconButton>
@@ -439,11 +443,11 @@ function MemberSummaryDrawer({ open, memberName, memberAvatar, project, onClose 
               {/* Legend */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
                 <Typography variant="caption" color="text.disabled" sx={{ fontSize: 10 }}>Less</Typography>
-                {['#f1f5f9', '#c7d2fe', '#818cf8', '#4338ca'].map(c => (
+                {[theme.palette.action.selected, '#c7d2fe', '#818cf8', '#4338ca'].map(c => (
                   <Box key={c} sx={{ width: 11, height: 11, borderRadius: 0.5, bgcolor: c, border: '1px solid rgba(0,0,0,0.1)' }} />
                 ))}
                 <Typography variant="caption" color="text.disabled" sx={{ fontSize: 10 }}>More</Typography>
-                <Box sx={{ width: 1, height: 14, bgcolor: '#e2e8f0', mx: 0.5 }} />
+                <Box sx={{ width: 1, height: 14, bgcolor: 'divider', mx: 0.5 }} />
                 <Box sx={{ width: 9, height: 9, borderRadius: '50%', bgcolor: '#0d9488' }} />
                 <Typography variant="caption" color="text.disabled" sx={{ fontSize: 10 }}>Confluence</Typography>
               </Box>
@@ -451,7 +455,7 @@ function MemberSummaryDrawer({ open, memberName, memberAvatar, project, onClose 
 
             {/* ── AI Focus Summary ── */}
             {data.aiSummary ? (
-              <Box sx={{ mb: 3, p: 2, borderRadius: 2.5, border: '1px solid #ede9fe', bgcolor: '#faf5ff' }}>
+              <Box sx={{ mb: 3, p: 2, borderRadius: 2.5, border: '1px solid rgba(124,58,237,0.25)', bgcolor: 'rgba(124,58,237,0.07)' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
                   <Typography variant="subtitle2" fontWeight={700}>🎯 Focus Summary</Typography>
                   {wlStyle && (
@@ -463,16 +467,16 @@ function MemberSummaryDrawer({ open, memberName, memberAvatar, project, onClose 
                 <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 1.5 }}>
                   {(data.aiSummary.focusAreas || []).map((area, i) => (
                     <Chip key={i} label={area} size="small"
-                      sx={{ fontSize: 11, height: 22, bgcolor: '#ede9fe', color: '#5b21b6' }} />
+                      sx={{ fontSize: 11, height: 22, bgcolor: 'rgba(124,58,237,0.12)', color: '#a78bfa' }} />
                   ))}
                 </Box>
                 {/* Narrative */}
-                <Typography variant="body2" sx={{ color: '#374151', lineHeight: 1.65, mb: 1.5 }}>
+                <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.65, mb: 1.5 }}>
                   {data.aiSummary.summary}
                 </Typography>
                 {/* Highlights */}
                 {(data.aiSummary.highlights || []).length > 0 && (
-                  <Box sx={{ borderTop: '1px solid #ede9fe', pt: 1.25 }}>
+                  <Box sx={{ borderTop: '1px solid', borderTopColor: 'divider', pt: 1.25 }}>
                     {data.aiSummary.highlights.map((h, i) => (
                       <Box key={i} sx={{ display: 'flex', gap: 1, mb: 0.5 }}>
                         <Typography variant="caption" sx={{ color: '#7c3aed', fontWeight: 700 }}>•</Typography>
@@ -498,17 +502,17 @@ function MemberSummaryDrawer({ open, memberName, memberAvatar, project, onClose 
               ) : (
                 data.issues.slice(0, 20).map(issue => (
                   <Box key={issue.key}
-                    sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.75, borderBottom: '1px solid #f1f5f9' }}>
+                    sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.75, borderBottom: '1px solid', borderBottomColor: 'divider' }}>
                     <Chip label={issue.key} size="small"
-                      sx={{ fontFamily: 'monospace', fontSize: 10, height: 20, bgcolor: '#eff6ff', color: '#1d4ed8', flexShrink: 0 }} />
+                      sx={{ fontFamily: 'monospace', fontSize: 10, height: 20, bgcolor: 'rgba(29,78,216,0.1)', color: '#60a5fa', flexShrink: 0 }} />
                     <Typography variant="caption"
                       sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {issue.summary}
                     </Typography>
                     <Chip label={issue.status} size="small" sx={{
                       fontSize: 10, height: 18, flexShrink: 0,
-                      bgcolor: issue.statusCat === 'Done' ? '#dcfce7' : issue.statusCat === 'In Progress' ? '#dbeafe' : '#f1f5f9',
-                      color:   issue.statusCat === 'Done' ? '#166534' : issue.statusCat === 'In Progress' ? '#1e40af' : '#64748b',
+                      bgcolor: issue.statusCat === 'Done' ? 'rgba(22,101,52,0.15)' : issue.statusCat === 'In Progress' ? 'rgba(29,78,216,0.12)' : theme.palette.action.selected,
+                      color:   issue.statusCat === 'Done' ? '#4ade80' : issue.statusCat === 'In Progress' ? '#60a5fa' : 'text.secondary',
                     }} />
                   </Box>
                 ))
@@ -529,7 +533,7 @@ function MemberSummaryDrawer({ open, memberName, memberAvatar, project, onClose 
                 <Typography variant="body2" color="text.disabled">No Confluence activity in last 30 days</Typography>
               ) : (
                 data.confluencePages.slice(0, 15).map((page, i) => (
-                  <Box key={page.id || i} sx={{ py: 0.75, borderBottom: '1px solid #f1f5f9' }}>
+                  <Box key={page.id || i} sx={{ py: 0.75, borderBottom: '1px solid', borderBottomColor: 'divider' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <ArticleIcon sx={{ fontSize: 14, color: '#0d9488', flexShrink: 0 }} />
                       {page.url ? (
@@ -782,7 +786,7 @@ export default function TeamBoard() {
       )}
 
       {/* Controls */}
-      <Paper elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: 3, p: 2.5, mb: 3 }}>
+      <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 3, p: 2.5, mb: 3 }}>
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <TextField
             label="Project Key"
@@ -909,7 +913,7 @@ export default function TeamBoard() {
 
       {/* Filter Bar */}
       {data && !loading && (
-        <Paper elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: 3, p: 2, mb: 3 }}>
+        <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 3, p: 2, mb: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
             {/* Label + active count */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mr: 0.5, flexShrink: 0 }}>
@@ -1057,7 +1061,7 @@ export default function TeamBoard() {
               ))}
               {filterRole !== 'all' && (
                 <Chip label={filterRole === 'current' ? 'Assigned only' : 'Past only'} size="small"
-                  onDelete={() => setFilterRole('all')} sx={{ fontSize: 11, height: 22, bgcolor: '#f3e5f5', color: '#7b1fa2' }} />
+                  onDelete={() => setFilterRole('all')} sx={{ fontSize: 11, height: 22, bgcolor: 'rgba(123,31,162,0.12)', color: '#9c27b0' }} />
               )}
               {filterTeamRole !== 'all' && (
                 <Chip
@@ -1066,7 +1070,7 @@ export default function TeamBoard() {
                   onDelete={() => setFilterTeamRole('all')}
                   sx={{
                     fontSize: 11, height: 22,
-                    bgcolor: filterTeamRole === 'UNTAGGED' ? '#f8fafc' : ROLE_CONFIG[filterTeamRole]?.bg,
+                    bgcolor: filterTeamRole === 'UNTAGGED' ? 'rgba(148,163,184,0.12)' : ROLE_CONFIG[filterTeamRole]?.bg,
                     color:   filterTeamRole === 'UNTAGGED' ? '#64748b' : ROLE_CONFIG[filterTeamRole]?.color,
                   }}
                 />
@@ -1103,7 +1107,7 @@ export default function TeamBoard() {
 
       {/* Empty state */}
       {data && !loading && filteredTeam.length === 0 && (
-        <Paper elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: 3, p: 5, textAlign: 'center' }}>
+        <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 3, p: 5, textAlign: 'center' }}>
           <Typography color="text.secondary">No issues found for this project/sprint.</Typography>
         </Paper>
       )}
@@ -1169,10 +1173,10 @@ function AllocationTable({ team, memberRoles = {}, onRoleChange, onSummaryClick 
   ) : <Typography variant="caption" color="text.disabled">—</Typography>;
 
   return (
-    <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: 3, mb: 3 }}>
+    <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 3, mb: 3 }}>
       <Table size="small">
         <TableHead>
-          <TableRow sx={{ bgcolor: '#f8fafc' }}>
+          <TableRow sx={{ bgcolor: 'background.default' }}>
             <TableCell sx={{ fontWeight: 700, py: 1.5 }}>Team Member</TableCell>
             <TableCell sx={{ fontWeight: 700 }}>Role</TableCell>
             <TableCell align="center" sx={{ fontWeight: 700 }}>Assigned</TableCell>
@@ -1184,7 +1188,7 @@ function AllocationTable({ team, memberRoles = {}, onRoleChange, onSummaryClick 
         </TableHead>
         <TableBody>
           {grouped.map(({ roleKey, members }) => {
-            const cfg  = roleKey === 'UNTAGGED' ? { label: 'Untagged', color: '#94a3b8', bg: '#f8fafc' } : ROLE_CONFIG[roleKey];
+            const cfg  = roleKey === 'UNTAGGED' ? { label: 'Untagged', color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' } : ROLE_CONFIG[roleKey];
             const meta = ROLE_SECTION_META[roleKey] || { icon: '•', label: roleKey };
             const groupRows = rows.filter(r => members.some(m => m.name === r.name));
             return [
@@ -1211,7 +1215,7 @@ function AllocationTable({ team, memberRoles = {}, onRoleChange, onSummaryClick 
                   {onSummaryClick && row.name !== 'Unassigned' && (
                     <Tooltip title="Member Insights" arrow>
                       <IconButton size="small" onClick={() => onSummaryClick(row.name, row.avatar)}
-                        sx={{ p: 0.25, color: '#6366f1', '&:hover': { bgcolor: '#ede9fe' }, ml: 'auto' }}>
+                        sx={{ p: 0.25, color: '#6366f1', '&:hover': { bgcolor: 'rgba(99,102,241,0.12)' }, ml: 'auto' }}>
                         <InsightsOutlined sx={{ fontSize: 15 }} />
                       </IconButton>
                     </Tooltip>
@@ -1304,7 +1308,7 @@ function StatCard({ label, value, color }) {
     <Paper
       elevation={0}
       sx={{
-        border: '1px solid #e2e8f0', borderRadius: 2.5, px: 2.5, py: 1.5,
+        border: '1px solid', borderColor: 'divider', borderRadius: 2.5, px: 2.5, py: 1.5,
         flex: '1 1 140px', minWidth: 120,
       }}
     >
