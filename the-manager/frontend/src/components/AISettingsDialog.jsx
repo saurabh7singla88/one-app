@@ -3,25 +3,22 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Button, Box, Typography, TextField, Select, MenuItem,
   FormControl, InputLabel, Divider, CircularProgress, Alert,
-  InputAdornment, IconButton, Chip,
+  InputAdornment, IconButton, Chip, Autocomplete,
 } from '@mui/material';
 import { Settings, Visibility, VisibilityOff, CheckCircle, SmartToy } from '@mui/icons-material';
 import api from '../api/axios';
 
 const PROVIDERS = [
   { value: 'ollama',            label: 'Ollama (local)',         icon: '🦙', desc: 'Free, runs locally. No API key needed.' },
-  { value: 'openai',            label: 'OpenAI / ChatGPT',       icon: '✨', desc: 'GPT-4o, GPT-4o-mini, etc. Requires API key.' },
-  { value: 'gemini',            label: 'Google Gemini',          icon: '♊', desc: 'Gemini 1.5 / 2.0 / 2.5 / 3. Requires API key.' },
-  { value: 'openai_compatible', label: 'OpenAI-compatible API',  icon: '🔌', desc: 'LM Studio, Together AI, Groq, Mistral, etc.' },
-  { value: 'disabled',          label: 'Disabled',               icon: '🚫', desc: 'Use structural scoring only, no LLM analysis.' },
+  { value: 'openai',   label: 'OpenAI / ChatGPT', icon: '✨', desc: 'GPT-4o, GPT-4o-mini, etc. Requires API key.' },
+  { value: 'gemini',   label: 'Google Gemini',    icon: '♊', desc: 'Gemini 1.5 / 2.0 / 2.5 / 3. Requires API key.' },
+  { value: 'disabled', label: 'Disabled',         icon: '🚫', desc: 'Use structural scoring only, no LLM analysis.' },
 ];
 
 const OPENAI_MODELS   = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'];
 const GEMINI_MODELS   = [
   'gemini-2.5-pro',
   'gemini-2.5-flash',
-  'gemini-2.5-pro-preview-03-25',
-  'gemini-2.5-flash-preview-04-17',
   'gemini-3-flash-preview',
 ];
 const OLLAMA_DEFAULTS = ['llama3.1:latest', 'llama3.2:latest', 'mistral:latest', 'phi3:latest', 'gemma2:latest'];
@@ -182,55 +179,16 @@ export default function AISettingsDialog({ open, onClose, onSaved }) {
                     ),
                   }}
                 />
-                <FormControl fullWidth size="small">
-                  <InputLabel>Model</InputLabel>
-                  <Select value={form.openaiModel} label="Model" onChange={set('openaiModel')}>
-                    {OPENAI_MODELS.map(m => <MenuItem key={m} value={m}>{m}</MenuItem>)}
-                    <Divider />
-                    <MenuItem value={form.openaiModel}
-                      style={{ display: OPENAI_MODELS.includes(form.openaiModel) ? 'none' : undefined }}
-                    >
-                      {form.openaiModel} (custom)
-                    </MenuItem>
-                  </Select>
-                </FormControl>
-              </>
-            )}
-
-            {/* ── OpenAI-compatible fields ── */}
-            {(provider === 'openai_compatible') && (
-              <>
-                <TextField
-                  label="Base URL"
-                  value={form.openaiBaseUrl}
-                  onChange={set('openaiBaseUrl')}
-                  fullWidth size="small"
-                  helperText="e.g. http://localhost:1234 (LM Studio), https://api.groq.com, https://api.together.xyz"
-                />
-                <TextField
-                  label="API Key"
-                  type={showOpenAIKey ? 'text' : 'password'}
-                  value={form.openaiApiKey}
-                  onChange={set('openaiApiKey')}
-                  fullWidth size="small"
-                  placeholder={keyStatus.openai ? 'Key already saved — paste new key to replace' : 'API key or token'}
-                  helperText={keyStatus.openai ? '✓ API key is set' : 'Leave blank if the endpoint requires no auth'}
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton size="small" onClick={() => setShowOpenAIKey(v => !v)}>
-                          {showOpenAIKey ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  }}
-                />
-                <TextField
-                  label="Model"
+                <Autocomplete
+                  freeSolo
+                  size="small"
+                  options={OPENAI_MODELS}
                   value={form.openaiModel}
-                  onChange={set('openaiModel')}
-                  fullWidth size="small"
-                  helperText="Model name as expected by the endpoint"
+                  onChange={(_, v) => v && set('openaiModel')({ target: { value: v } })}
+                  onInputChange={(_, v) => set('openaiModel')({ target: { value: v } })}
+                  renderInput={(params) => (
+                    <TextField {...params} label="Model" fullWidth helperText="Pick from list or type any model name" />
+                  )}
                 />
               </>
             )}
@@ -256,12 +214,17 @@ export default function AISettingsDialog({ open, onClose, onSaved }) {
                     ),
                   }}
                 />
-                <FormControl fullWidth size="small">
-                  <InputLabel>Model</InputLabel>
-                  <Select value={form.geminiModel} label="Model" onChange={set('geminiModel')}>
-                    {GEMINI_MODELS.map(m => <MenuItem key={m} value={m}>{m}</MenuItem>)}
-                  </Select>
-                </FormControl>
+                <Autocomplete
+                  freeSolo
+                  size="small"
+                  options={GEMINI_MODELS}
+                  value={form.geminiModel}
+                  onChange={(_, v) => v && set('geminiModel')({ target: { value: v } })}
+                  onInputChange={(_, v) => set('geminiModel')({ target: { value: v } })}
+                  renderInput={(params) => (
+                    <TextField {...params} label="Model" fullWidth helperText="Pick from list or type any model name" />
+                  )}
+                />
               </>
             )}
 

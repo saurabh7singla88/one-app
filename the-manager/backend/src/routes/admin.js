@@ -7,7 +7,7 @@ const router = Router();
 
 const ENCRYPTED_KEYS = new Set([
   'ai_openai_api_key', 'ai_gemini_api_key',
-  'ai_bedrock_access_key_id', 'ai_bedrock_secret_key',
+  'ai_bedrock_api_key',
 ]);
 
 function safeEncrypt(value) {
@@ -54,10 +54,8 @@ router.get('/ai/settings', async (req, res, next) => {
       geminiApiKeySet:       !!s.ai_gemini_api_key,
       bedrockRegion:         s.ai_bedrock_region || '',
       bedrockModel:          s.ai_bedrock_model || '',
-      bedrockAccessKeyId:    mask(s.ai_bedrock_access_key_id),
-      bedrockAccessKeyIdSet: !!s.ai_bedrock_access_key_id,
-      bedrockSecretKey:      mask(s.ai_bedrock_secret_key),
-      bedrockSecretKeySet:   !!s.ai_bedrock_secret_key,
+      bedrockApiKey:         mask(s.ai_bedrock_api_key),
+      bedrockApiKeySet:      !!s.ai_bedrock_api_key,
     });
   } catch (err) { next(err); }
 });
@@ -69,7 +67,7 @@ router.put('/ai/settings', async (req, res, next) => {
       provider, ollamaBaseUrl, ollamaModel,
       openaiBaseUrl, openaiModel, openaiApiKey,
       geminiModel, geminiApiKey,
-      bedrockRegion, bedrockModel, bedrockAccessKeyId, bedrockSecretKey,
+      bedrockRegion, bedrockModel, bedrockApiKey,
     } = req.body;
     const updates = {};
     if (provider != null)       updates.ai_provider = provider;
@@ -84,10 +82,8 @@ router.put('/ai/settings', async (req, res, next) => {
       updates.ai_gemini_api_key = safeEncrypt(geminiApiKey);
     if (bedrockRegion != null)  updates.ai_bedrock_region = bedrockRegion;
     if (bedrockModel != null)   updates.ai_bedrock_model = bedrockModel;
-    if (bedrockAccessKeyId != null && bedrockAccessKeyId !== '' && !bedrockAccessKeyId.startsWith('•'))
-      updates.ai_bedrock_access_key_id = safeEncrypt(bedrockAccessKeyId);
-    if (bedrockSecretKey != null && bedrockSecretKey !== '' && !bedrockSecretKey.startsWith('•'))
-      updates.ai_bedrock_secret_key = safeEncrypt(bedrockSecretKey);
+    if (bedrockApiKey != null && bedrockApiKey !== '' && !bedrockApiKey.startsWith('•'))
+      updates.ai_bedrock_api_key = safeEncrypt(bedrockApiKey);
 
     await Promise.all(
       Object.entries(updates).map(([key, value]) =>

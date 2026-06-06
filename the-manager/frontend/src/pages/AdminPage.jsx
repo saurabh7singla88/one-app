@@ -3,7 +3,7 @@ import { useTheme } from '@mui/material/styles';
 import {
   Box, Typography, TextField, Button, Alert, CircularProgress,
   Paper, Divider, Select, MenuItem, FormControl, InputLabel,
-  InputAdornment, IconButton, Link,
+  InputAdornment, IconButton, Link, Autocomplete,
 } from '@mui/material';
 import { Lock, Save, Logout, SmartToy, Visibility, VisibilityOff, CheckCircle } from '@mui/icons-material';
 import {
@@ -12,16 +12,15 @@ import {
 } from '../api/admin';
 
 const PROVIDERS = [
-  { value: 'ollama',            label: 'Ollama (local)',        icon: '🦙', desc: 'Free, runs locally. No API key needed.' },
-  { value: 'openai',            label: 'OpenAI / ChatGPT',      icon: '✨', desc: 'GPT-4o and friends. Requires API key.' },
-  { value: 'gemini',            label: 'Google Gemini',         icon: '♊', desc: 'Gemini 2.5 / 3.x. Requires API key.' },
-  { value: 'openai_compatible', label: 'OpenAI-compatible API', icon: '🔌', desc: 'LM Studio, Groq, Together AI, Mistral, etc.' },
-  { value: 'bedrock',           label: 'AWS Bedrock',           icon: '☁️', desc: 'Claude, Llama via AWS. Requires IAM credentials.' },
-  { value: 'disabled',          label: 'Disabled',              icon: '🚫', desc: 'AI disabled by default for all users.' },
+  { value: 'ollama',   label: 'Ollama (local)',  icon: '🦙', desc: 'Free, runs locally. No API key needed.' },
+  { value: 'openai',   label: 'OpenAI / ChatGPT', icon: '✨', desc: 'GPT-4o and friends. Requires API key.' },
+  { value: 'gemini',   label: 'Google Gemini',   icon: '♊', desc: 'Gemini 2.5 / 3.x. Requires API key.' },
+  { value: 'bedrock',  label: 'AWS Bedrock',      icon: '☁️', desc: 'Claude, Llama via AWS. Requires Bedrock API key.' },
+  { value: 'disabled', label: 'Disabled',         icon: '🚫', desc: 'AI disabled by default for all users.' },
 ];
 
 const OPENAI_MODELS = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'];
-const GEMINI_MODELS = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-preview-04-17', 'gemini-3-flash-preview'];
+const GEMINI_MODELS = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-3-flash-preview'];
 const BEDROCK_REGIONS = ['us-east-1', 'us-west-2', 'eu-west-1', 'eu-central-1', 'ap-southeast-1', 'ap-northeast-1'];
 
 // ─── Login form ───────────────────────────────────────────────────────────────
@@ -109,9 +108,8 @@ function AISettingsPanel({ onLogout }) {
   const [error, setError]               = useState('');
   const [showOAIKey, setShowOAIKey]     = useState(false);
   const [showGemKey, setShowGemKey]     = useState(false);
-  const [showBDKeyId, setShowBDKeyId]   = useState(false);
-  const [showBDSecret, setShowBDSecret] = useState(false);
-  const [keyStatus, setKeyStatus]       = useState({ openai: false, gemini: false, bedrockKeyId: false, bedrockSecret: false });
+  const [showBDKey, setShowBDKey]       = useState(false);
+  const [keyStatus, setKeyStatus]       = useState({ openai: false, gemini: false, bedrock: false });
 
   const [form, setForm] = useState({
     provider: 'ollama',
@@ -124,8 +122,7 @@ function AISettingsPanel({ onLogout }) {
     geminiApiKey: '',
     bedrockRegion: 'us-east-1',
     bedrockModel: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    bedrockAccessKeyId: '',
-    bedrockSecretKey: '',
+    bedrockApiKey: '',
   });
 
   useEffect(() => {
@@ -143,10 +140,9 @@ function AISettingsPanel({ onLogout }) {
           bedrockModel:  d.bedrockModel   || 'anthropic.claude-3-5-sonnet-20241022-v2:0',
         }));
         setKeyStatus({
-          openai:       !!d.openaiApiKeySet,
-          gemini:       !!d.geminiApiKeySet,
-          bedrockKeyId: !!d.bedrockAccessKeyIdSet,
-          bedrockSecret: !!d.bedrockSecretKeySet,
+          openai:  !!d.openaiApiKeySet,
+          gemini:  !!d.geminiApiKeySet,
+          bedrock: !!d.bedrockApiKeySet,
         });
       })
       .catch(() => setError('Failed to load settings. Your session may have expired.'))
@@ -161,13 +157,12 @@ function AISettingsPanel({ onLogout }) {
       await putAdminAISettings(form);
       setSaved(true);
       setKeyStatus({
-        openai:        form.openaiApiKey      ? true : keyStatus.openai,
-        gemini:        form.geminiApiKey      ? true : keyStatus.gemini,
-        bedrockKeyId:  form.bedrockAccessKeyId ? true : keyStatus.bedrockKeyId,
-        bedrockSecret: form.bedrockSecretKey   ? true : keyStatus.bedrockSecret,
+        openai:  form.openaiApiKey  ? true : keyStatus.openai,
+        gemini:  form.geminiApiKey  ? true : keyStatus.gemini,
+        bedrock: form.bedrockApiKey ? true : keyStatus.bedrock,
       });
       setTimeout(() => setSaved(false), 3000);
-    } catch { setError('Failed to save. Please try again.'); }
+    } catch (err) { setError(err?.response?.data?.error || err?.message || 'Failed to save. Please try again.'); }
     finally { setSaving(false); }
   };
 
@@ -246,19 +241,15 @@ function AISettingsPanel({ onLogout }) {
               </Box>
             )}
 
-            {/* OpenAI / OpenAI-compatible */}
-            {(p === 'openai' || p === 'openai_compatible') && (
+            {/* OpenAI */}
+            {p === 'openai' && (
               <Box display="flex" flexDirection="column" gap={2}>
-                {p === 'openai_compatible' && (
-                  <TextField label="Base URL" value={form.openaiBaseUrl} onChange={set('openaiBaseUrl')} size="small" fullWidth
-                    helperText="e.g. http://localhost:1234, https://api.groq.com, https://api.together.xyz" />
-                )}
                 <Box display="flex" gap={2}>
                   <TextField
                     label="API Key" type={showOAIKey ? 'text' : 'password'}
                     value={form.openaiApiKey} onChange={set('openaiApiKey')} size="small" sx={{ flex: 3 }}
-                    placeholder={keyStatus.openai ? 'Paste new key to replace…' : (p === 'openai' ? 'sk-…' : 'API key or token')}
-                    helperText={keyStatus.openai ? '✓ Key is saved' : (p === 'openai_compatible' ? 'Leave blank if not required' : 'Required')}
+                    placeholder={keyStatus.openai ? 'Paste new key to replace…' : 'sk-…'}
+                    helperText={keyStatus.openai ? '✓ Key is saved' : 'Required'}
                     InputProps={{ endAdornment: (
                       <InputAdornment position="end">
                         <IconButton size="small" onClick={() => setShowOAIKey(v => !v)}>
@@ -267,16 +258,18 @@ function AISettingsPanel({ onLogout }) {
                       </InputAdornment>
                     )}}
                   />
-                  {p === 'openai' ? (
-                    <FormControl size="small" sx={{ flex: 2 }}>
-                      <InputLabel>Model</InputLabel>
-                      <Select value={form.openaiModel} label="Model" onChange={set('openaiModel')}>
-                        {OPENAI_MODELS.map(m => <MenuItem key={m} value={m}>{m}</MenuItem>)}
-                      </Select>
-                    </FormControl>
-                  ) : (
-                    <TextField label="Model name" value={form.openaiModel} onChange={set('openaiModel')} size="small" sx={{ flex: 2 }} helperText="As recognised by your endpoint" />
-                  )}
+                  <Autocomplete
+                    freeSolo
+                    size="small"
+                    sx={{ flex: 2 }}
+                    options={OPENAI_MODELS}
+                    value={form.openaiModel}
+                    onChange={(_, v) => v && set('openaiModel')({ target: { value: v } })}
+                    onInputChange={(_, v) => set('openaiModel')({ target: { value: v } })}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Model" helperText="Pick from list or type any model name" />
+                    )}
+                  />
                 </Box>
               </Box>
             )}
@@ -297,12 +290,18 @@ function AISettingsPanel({ onLogout }) {
                     </InputAdornment>
                   )}}
                 />
-                <FormControl size="small" sx={{ flex: 2 }}>
-                  <InputLabel>Model</InputLabel>
-                  <Select value={form.geminiModel} label="Model" onChange={set('geminiModel')}>
-                    {GEMINI_MODELS.map(m => <MenuItem key={m} value={m}>{m}</MenuItem>)}
-                  </Select>
-                </FormControl>
+                <Autocomplete
+                  freeSolo
+                  size="small"
+                  sx={{ flex: 2 }}
+                  options={GEMINI_MODELS}
+                  value={form.geminiModel}
+                  onChange={(_, v) => v && set('geminiModel')({ target: { value: v } })}
+                  onInputChange={(_, v) => set('geminiModel')({ target: { value: v } })}
+                  renderInput={(params) => (
+                    <TextField {...params} label="Model" helperText="Pick from list or type any model name" />
+                  )}
+                />
               </Box>
             )}
 
@@ -310,10 +309,10 @@ function AISettingsPanel({ onLogout }) {
             {p === 'bedrock' && (
               <Box display="flex" flexDirection="column" gap={2}>
                 <Typography variant="body2" color="text.secondary">
-                  Long-term IAM credentials with <code>bedrock:InvokeModel</code> permission.{' '}
-                  <Link href="https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started.html" target="_blank" rel="noopener">
-                    AWS Bedrock docs
-                  </Link>
+                  Get a Bedrock API key from the{' '}
+                  <Link href="https://console.aws.amazon.com/bedrock/home#/api-keys" target="_blank" rel="noopener">
+                    AWS Bedrock console → API Keys
+                  </Link>. No SigV4 signing or IAM credentials needed.
                 </Typography>
                 <Box display="flex" gap={2}>
                   <FormControl size="small" sx={{ flex: 1 }}>
@@ -328,34 +327,19 @@ function AISettingsPanel({ onLogout }) {
                     helperText="e.g. anthropic.claude-3-5-sonnet-20241022-v2:0"
                   />
                 </Box>
-                <Box display="flex" gap={2}>
-                  <TextField
-                    label="Access Key ID" type={showBDKeyId ? 'text' : 'password'}
-                    value={form.bedrockAccessKeyId} onChange={set('bedrockAccessKeyId')} size="small" sx={{ flex: 1 }}
-                    placeholder={keyStatus.bedrockKeyId ? 'Paste new key to replace…' : 'AKIA…'}
-                    helperText={keyStatus.bedrockKeyId ? '✓ Key is saved' : 'Required'}
-                    InputProps={{ endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton size="small" onClick={() => setShowBDKeyId(v => !v)}>
-                          {showBDKeyId ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
-                        </IconButton>
-                      </InputAdornment>
-                    )}}
-                  />
-                  <TextField
-                    label="Secret Access Key" type={showBDSecret ? 'text' : 'password'}
-                    value={form.bedrockSecretKey} onChange={set('bedrockSecretKey')} size="small" sx={{ flex: 1 }}
-                    placeholder={keyStatus.bedrockSecret ? 'Paste new key to replace…' : 'Secret key'}
-                    helperText={keyStatus.bedrockSecret ? '✓ Key is saved' : 'Required'}
-                    InputProps={{ endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton size="small" onClick={() => setShowBDSecret(v => !v)}>
-                          {showBDSecret ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
-                        </IconButton>
-                      </InputAdornment>
-                    )}}
-                  />
-                </Box>
+                <TextField
+                  label="API Key" type={showBDKey ? 'text' : 'password'}
+                  value={form.bedrockApiKey} onChange={set('bedrockApiKey')} size="small" fullWidth
+                  placeholder={keyStatus.bedrock ? 'Paste new key to replace…' : 'bedrock-api-key-…'}
+                  helperText={keyStatus.bedrock ? '✓ Key is saved' : 'Required — create one in AWS Bedrock console → API Keys'}
+                  InputProps={{ endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton size="small" onClick={() => setShowBDKey(v => !v)}>
+                        {showBDKey ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                      </IconButton>
+                    </InputAdornment>
+                  )}}
+                />
               </Box>
             )}
 

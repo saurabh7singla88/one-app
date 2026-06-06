@@ -22,10 +22,9 @@ import AISettingsDialog from './AISettingsDialog';
 const _cache = new Map(); // key: `${mode}:${canvasId ?? 'all'}` → data object
 
 const PROVIDER_BADGE = {
-  ollama:            { label: '🦙 Ollama',   color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0', darkColor: '#4ade80', darkBg: 'rgba(21,128,61,0.15)',   darkBorder: 'rgba(21,128,61,0.3)'   },
-  openai:            { label: '✨ OpenAI',    color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe', darkColor: '#60a5fa', darkBg: 'rgba(59,130,246,0.15)',  darkBorder: 'rgba(59,130,246,0.3)'  },
-  openai_compatible: { label: '🔌 Custom AI', color: '#6b21a8', bg: '#faf5ff', border: '#e9d5ff', darkColor: '#c084fc', darkBg: 'rgba(168,85,247,0.15)',  darkBorder: 'rgba(168,85,247,0.3)'  },
-  gemini:            { label: '♊ Gemini',    color: '#b45309', bg: '#fffbeb', border: '#fde68a', darkColor: '#fbbf24', darkBg: 'rgba(251,191,36,0.15)',  darkBorder: 'rgba(251,191,36,0.3)'  },
+  ollama:  { label: '🦙 Ollama',  color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0', darkColor: '#4ade80', darkBg: 'rgba(21,128,61,0.15)',   darkBorder: 'rgba(21,128,61,0.3)'   },
+  openai:  { label: '✨ OpenAI',   color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe', darkColor: '#60a5fa', darkBg: 'rgba(59,130,246,0.15)',  darkBorder: 'rgba(59,130,246,0.3)'  },
+  gemini:  { label: '♊ Gemini',   color: '#b45309', bg: '#fffbeb', border: '#fde68a', darkColor: '#fbbf24', darkBg: 'rgba(251,191,36,0.15)',  darkBorder: 'rgba(251,191,36,0.3)'  },
 };
 
 const STATUS_CHIP = {
@@ -52,19 +51,19 @@ export default function AIPriorityStrip({
   const [state, setState] = useState(() => ({
     loading: !lazy && !cached,   // auto-fetch → start loading; lazy + no cache → idle
     data: cached ?? null,
-    error: false,
+    error: null,
     idle: lazy && !cached,       // true = waiting for user to click the button
   }));
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const load = useCallback((force = false) => {
-    setState(prev => ({ ...prev, loading: true, error: false, idle: false }));
+    setState(prev => ({ ...prev, loading: true, error: null, idle: false }));
     api.get('/ai/suggestions', { params: { limit, mode, ...(canvasId ? { canvasId } : {}) } })
       .then(r => {
         _cache.set(cacheKey, r.data);
-        setState({ loading: false, data: r.data, error: false, idle: false });
+        setState({ loading: false, data: r.data, error: null, idle: false });
       })
-      .catch(() => setState(prev => ({ ...prev, loading: false, data: null, error: true, idle: false })));
+      .catch(e => setState(prev => ({ ...prev, loading: false, data: null, error: e.response?.data?.error || 'Could not load suggestions.', idle: false })));
   }, [mode, limit, canvasId, cacheKey]);
 
   useEffect(() => {
@@ -183,7 +182,25 @@ export default function AIPriorityStrip({
 
       {/* Error */}
       {!state.loading && !state.idle && state.error && (
-        <Typography variant="body2" color="text.secondary">Could not load suggestions.</Typography>
+        <Box>
+          <Typography variant="body2" sx={{ color: 'error.main', fontSize: '0.78rem' }}>
+            ⚠️ {state.error}
+          </Typography>
+          <Button
+            size="small"
+            onClick={() => setSettingsOpen(true)}
+            sx={{ mt: 0.5, fontSize: '0.7rem', color: accentColor, p: 0, minWidth: 0, textTransform: 'none', fontWeight: 600 }}
+          >
+            Configure AI →
+          </Button>
+        </Box>
+      )}
+
+      {/* AI error warning (AI failed but structural results shown) */}
+      {!state.loading && !state.error && state.data?.llmError && (
+        <Typography variant="caption" sx={{ display: 'block', mb: 1, color: isDark ? '#fbbf24' : '#92400e', fontSize: '0.7rem', lineHeight: 1.4 }}>
+          ⚠️ AI unavailable — {state.data.llmError}
+        </Typography>
       )}
 
       {/* Empty */}

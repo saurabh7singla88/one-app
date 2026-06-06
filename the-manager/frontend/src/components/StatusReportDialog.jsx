@@ -15,7 +15,7 @@ const PERIODS = [
   { value: 'custom',     label: 'Custom Range' },
 ];
 
-const PROVIDER_LABELS = { gemini: 'Gemini', openai: 'OpenAI', openai_compatible: 'OpenAI-compat', ollama: 'Ollama' };
+const PROVIDER_LABELS = { gemini: 'Gemini', openai: 'OpenAI', ollama: 'Ollama' };
 
 export default function StatusReportDialog({ open, onClose, activeCanvasId, canvases = [] }) {
   const [period, setPeriod]     = useState('week');

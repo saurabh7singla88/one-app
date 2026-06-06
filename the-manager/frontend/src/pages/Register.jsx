@@ -30,7 +30,7 @@ export default function Register() {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', bgcolor: '#f8fafc' }}>
+    <Box sx={{ minHeight: '100vh', display: 'flex', bgcolor: 'background.default' }}>
       {/* Left decorative panel */}
       <Box
         sx={{

@@ -13,10 +13,9 @@ import { useNavigate } from 'react-router-dom';
 import AISettingsDialog from './AISettingsDialog';
 
 const PROVIDER_BADGE = {
-  ollama:            { label: '🦙 Ollama',   color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0', darkColor: '#4ade80', darkBg: 'rgba(21,128,61,0.15)',  darkBorder: 'rgba(21,128,61,0.3)'  },
-  openai:            { label: '✨ OpenAI',    color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe', darkColor: '#60a5fa', darkBg: 'rgba(59,130,246,0.15)', darkBorder: 'rgba(59,130,246,0.3)' },
-  openai_compatible: { label: '🔌 Custom AI', color: '#6b21a8', bg: '#faf5ff', border: '#e9d5ff', darkColor: '#c084fc', darkBg: 'rgba(168,85,247,0.15)', darkBorder: 'rgba(168,85,247,0.3)' },
-  gemini:            { label: '♊ Gemini',    color: '#b45309', bg: '#fffbeb', border: '#fde68a', darkColor: '#fbbf24', darkBg: 'rgba(251,191,36,0.15)', darkBorder: 'rgba(251,191,36,0.3)' },
+  ollama:  { label: '🦙 Ollama',  color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0', darkColor: '#4ade80', darkBg: 'rgba(21,128,61,0.15)',  darkBorder: 'rgba(21,128,61,0.3)'  },
+  openai:  { label: '✨ OpenAI',   color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe', darkColor: '#60a5fa', darkBg: 'rgba(59,130,246,0.15)', darkBorder: 'rgba(59,130,246,0.3)' },
+  gemini:  { label: '♊ Gemini',   color: '#b45309', bg: '#fffbeb', border: '#fde68a', darkColor: '#fbbf24', darkBg: 'rgba(251,191,36,0.15)', darkBorder: 'rgba(251,191,36,0.3)' },
 };
 
 const STATUS_CONFIG = {
@@ -83,7 +82,7 @@ export default function AISuggestionsPanel({ open, onClose, canvasId }) {
       const res = await api.get('/ai/suggestions', { params });
       setData(res.data);
     } catch (e) {
-      setError('Failed to load suggestions. Please try again.');
+      setError(e.response?.data?.error || 'Failed to load suggestions. Please check your connection.');
     } finally {
       setLoading(false);
     }
@@ -157,7 +156,34 @@ export default function AISuggestionsPanel({ open, onClose, canvasId }) {
         {!loading && error && (
           <Box px={3} py={6} textAlign="center">
             <Typography color="error" mb={2}>{error}</Typography>
-            <Button size="small" onClick={load} startIcon={<Refresh />}>Retry</Button>
+            <Box display="flex" gap={1} justifyContent="center">
+              <Button size="small" onClick={load} startIcon={<Refresh />}>Retry</Button>
+              <Button size="small" onClick={() => setSettingsOpen(true)} startIcon={<Settings />}>AI Settings</Button>
+            </Box>
+          </Box>
+        )}
+
+        {/* ── AI error warning (AI failed but structural results still shown) ── */}
+        {!loading && !error && data?.llmError && (
+          <Box
+            sx={{
+              mx: 3, mt: 1.5,
+              p: 1.5, borderRadius: 2,
+              bgcolor: isDark ? 'rgba(217,119,6,0.1)' : '#fffbeb',
+              border: '1px solid',
+              borderColor: isDark ? 'rgba(217,119,6,0.3)' : '#fde68a',
+            }}
+          >
+            <Typography variant="caption" sx={{ color: isDark ? '#fbbf24' : '#92400e', display: 'block', lineHeight: 1.4 }}>
+              ⚠️ AI scoring unavailable — {data.llmError}
+            </Typography>
+            <Button
+              size="small"
+              onClick={() => setSettingsOpen(true)}
+              sx={{ mt: 0.75, fontSize: '0.7rem', color: '#7c3aed', p: 0, minWidth: 0, textTransform: 'none', fontWeight: 600 }}
+            >
+              Configure AI →
+            </Button>
           </Box>
         )}
 

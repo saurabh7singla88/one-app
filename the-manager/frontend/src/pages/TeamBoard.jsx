@@ -345,17 +345,27 @@ function HeatCell({ day, maxVal }) {
 
 function MemberSummaryDrawer({ open, memberName, memberAvatar, project, onClose }) {
   const theme = useTheme();
-  const [loading, setLoading] = useState(false);
-  const [data, setData]       = useState(null);
-  const [error, setError]     = useState('');
+  const [loading, setLoading]   = useState(false);
+  const [data, setData]         = useState(null);
+  const [error, setError]       = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiData, setAiData]     = useState(null); // { aiSummary, aiError }
 
   useEffect(() => {
     if (!open || !memberName || !project) return;
-    setLoading(true); setData(null); setError('');
-    api.get('/jira/member-summary', { params: { project, member: memberName }, timeout: 65000 })
+    setLoading(true); setData(null); setError(''); setAiData(null); setAiLoading(true);
+
+    // Fast path: fetch JIRA/Confluence data without waiting for AI
+    api.get('/jira/member-summary', { params: { project, member: memberName, skipAi: 'true' } })
       .then(r => setData(r.data))
       .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load summary'))
       .finally(() => setLoading(false));
+
+    // Slow path: AI summary in parallel
+    api.get('/jira/member-summary-ai', { params: { project, member: memberName }, timeout: 65000 })
+      .then(r => setAiData(r.data))
+      .catch(e => setAiData({ aiSummary: null, aiError: e?.response?.data?.error || e.message || 'AI analysis failed' }))
+      .finally(() => setAiLoading(false));
   }, [open, memberName, project]);
 
   const activityMax = useMemo(
@@ -372,7 +382,7 @@ function MemberSummaryDrawer({ open, memberName, memberAvatar, project, onClose 
       })()
     : [];
 
-  const wl = data?.aiSummary?.workloadLevel;
+  const wl = aiData?.aiSummary?.workloadLevel;
   const wlStyle = WORKLOAD_STYLE[wl] || null;
 
   return (
@@ -454,7 +464,18 @@ function MemberSummaryDrawer({ open, memberName, memberAvatar, project, onClose 
             </Box>
 
             {/* ── AI Focus Summary ── */}
-            {data.aiSummary ? (
+            {aiLoading ? (
+              <Box sx={{ mb: 3, p: 2, borderRadius: 2.5, border: '1px solid rgba(124,58,237,0.25)', bgcolor: 'rgba(124,58,237,0.07)' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                  <Typography variant="subtitle2" fontWeight={700}>🎯 Focus Summary</Typography>
+                  <Chip label="analysing…" size="small"
+                    sx={{ fontSize: 10, height: 20, fontWeight: 600, bgcolor: 'rgba(124,58,237,0.15)', color: '#a78bfa' }} />
+                </Box>
+                <Skeleton variant="text" width="85%" sx={{ mb: 0.75 }} />
+                <Skeleton variant="text" width="70%" sx={{ mb: 0.75 }} />
+                <Skeleton variant="text" width="90%" />
+              </Box>
+            ) : aiData?.aiSummary ? (
               <Box sx={{ mb: 3, p: 2, borderRadius: 2.5, border: '1px solid rgba(124,58,237,0.25)', bgcolor: 'rgba(124,58,237,0.07)' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
                   <Typography variant="subtitle2" fontWeight={700}>🎯 Focus Summary</Typography>
@@ -465,30 +486,30 @@ function MemberSummaryDrawer({ open, memberName, memberAvatar, project, onClose 
                 </Box>
                 {/* Focus area chips */}
                 <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 1.5 }}>
-                  {(data.aiSummary.focusAreas || []).map((area, i) => (
+                  {(aiData.aiSummary.focusAreas || []).map((area, i) => (
                     <Chip key={i} label={area} size="small"
                       sx={{ fontSize: 11, height: 22, bgcolor: 'rgba(124,58,237,0.12)', color: '#a78bfa' }} />
                   ))}
                 </Box>
                 {/* Narrative */}
                 <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.65, mb: 1.5 }}>
-                  {data.aiSummary.summary}
+                  {aiData.aiSummary.summary}
                 </Typography>
                 {/* Highlights */}
-                {(data.aiSummary.highlights || []).length > 0 && (
+                {(aiData.aiSummary.highlights || []).length > 0 && (
                   <Box sx={{ borderTop: '1px solid', borderTopColor: 'divider', pt: 1.25 }}>
-                    {data.aiSummary.highlights.map((h, i) => (
+                    {aiData.aiSummary.highlights.map((h, i) => (
                       <Box key={i} sx={{ display: 'flex', gap: 1, mb: 0.5 }}>
                         <Typography variant="caption" sx={{ color: '#7c3aed', fontWeight: 700 }}>•</Typography>
-                        <Typography variant="caption" sx={{ color: '#4b5563', lineHeight: 1.5 }}>{h}</Typography>
+                        <Typography variant="caption" sx={{ color: 'text.secondary', lineHeight: 1.5 }}>{h}</Typography>
                       </Box>
                     ))}
                   </Box>
                 )}
               </Box>
             ) : (
-              <Alert severity="info" sx={{ mb: 3, fontSize: 12 }}>
-                AI summary unavailable — check AI settings in Setup.
+              <Alert severity="warning" sx={{ mb: 3, fontSize: 12 }}>
+                {aiData?.aiError || 'AI summary unavailable — check AI settings in Setup.'}
               </Alert>
             )}
 

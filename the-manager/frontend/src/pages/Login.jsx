@@ -5,6 +5,7 @@ import {
   Box, TextField, Button, Typography, Alert, Paper, InputAdornment, IconButton, CircularProgress,
   Dialog, DialogTitle, DialogContent, DialogActions, Divider, FormControlLabel, Checkbox,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import { Email, Lock, Visibility, VisibilityOff, AccountTree, ContentCopy, CheckCircle } from '@mui/icons-material';
 import { login } from '../features/auth/authSlice';
 import api from '../api/axios';
@@ -92,7 +93,7 @@ function ForgotPasswordDialog({ open, onClose }) {
         {step === 'reset' && (
           <Box display="flex" flexDirection="column" gap={2} pt={0.5}>
             {token && (
-              <Box sx={{ bgcolor: '#f1f5f9', borderRadius: 2, p: 1.5 }}>
+              <Box sx={{ bgcolor: 'action.hover', borderRadius: 2, p: 1.5 }}>
                 <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
                   Your reset token (valid for 24 hours):
                 </Typography>
@@ -166,11 +167,22 @@ function ForgotPasswordDialog({ open, onClose }) {
 export default function Login() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const { loading, error } = useSelector((state) => state.auth);
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+
+  const autofillSx = {
+    '& input:-webkit-autofill, & input:-webkit-autofill:hover, & input:-webkit-autofill:focus': {
+      WebkitBoxShadow: `0 0 0 100px ${isDark ? '#0f172a' : '#f8fafc'} inset`,
+      WebkitTextFillColor: isDark ? '#f1f5f9' : '#0f172a',
+      caretColor: isDark ? '#f1f5f9' : '#0f172a',
+      borderRadius: 'inherit',
+    },
+  };
 
   useEffect(() => {
     const saved = localStorage.getItem('one_saved_credentials');
@@ -202,7 +214,7 @@ export default function Login() {
       sx={{
         minHeight: '100vh',
         display: 'flex',
-        bgcolor: '#f8fafc',
+        bgcolor: 'background.default',
       }}
     >
       {/* Left panel */}
@@ -270,7 +282,7 @@ export default function Login() {
               value={formData.email}
               onChange={handleChange}
               required
-              sx={{ mb: 2 }}
+              sx={{ mb: 2, ...autofillSx }}
               InputProps={{
                 startAdornment: <InputAdornment position="start"><Email sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment>
               }}
@@ -284,7 +296,7 @@ export default function Login() {
               value={formData.password}
               onChange={handleChange}
               required
-              sx={{ mb: 3 }}
+              sx={{ mb: 3, ...autofillSx }}
               InputProps={{
                 startAdornment: <InputAdornment position="start"><Lock sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment>,
                 endAdornment: (

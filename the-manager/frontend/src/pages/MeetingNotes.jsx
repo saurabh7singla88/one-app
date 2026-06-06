@@ -56,7 +56,7 @@ function renderEmailBody(text) {
 // ── Action Items Panel ────────────────────────────────────────────────────────
 const PROVIDER_LABEL = {
   ollama: '🦙 Ollama', openai: '✨ OpenAI', gemini: '♊ Gemini',
-  openai_compatible: '🔌 Compatible', disabled: '—',
+  disabled: '—',
 };
 
 function ActionItemsPanel({ data, userName }) {

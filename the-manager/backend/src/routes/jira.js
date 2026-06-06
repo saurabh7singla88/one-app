@@ -662,8 +662,9 @@ ${confLines || '(none)'}
 Analyze the above and return the JSON summary.`;
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 28_000);
+    const timer = setTimeout(() => controller.abort(), 60_000);
     let text = null;
+    let aiError = null;
     try {
       if (provider === 'ollama') {
         const r = await fetch(`${s.ai_ollama_base_url}/api/chat`, {
@@ -675,7 +676,8 @@ Analyze the above and return the JSON summary.`;
           }),
         });
         if (r.ok) { const d = await r.json(); text = d.message?.content || d.response; }
-      } else if (provider === 'openai' || provider === 'openai_compatible') {
+        else { aiError = `Ollama error: HTTP ${r.status}. Make sure Ollama is running and the model is available.`; }
+      } else if (provider === 'openai') {
         const base = (s.ai_openai_base_url || 'https://api.openai.com').replace(/\/$/, '');
         const r = await fetch(`${base}/v1/chat/completions`, {
           method: 'POST', signal: controller.signal,
@@ -687,132 +689,205 @@ Analyze the above and return the JSON summary.`;
           }),
         });
         if (r.ok) { const d = await r.json(); text = d.choices?.[0]?.message?.content; }
+        else {
+          const d = await r.json().catch(() => ({}));
+          aiError = d?.error?.message || `OpenAI error: HTTP ${r.status}`;
+        }
       } else if (provider === 'gemini') {
         const model = s.ai_gemini_model || 'gemini-1.5-flash';
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${s.ai_gemini_api_key}`;
-        const r = await fetch(url, {
-          method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            system_instruction: { parts: [{ text: systemPrompt }] },
-            contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-            generationConfig: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 1024 },
-          }),
+        // gemini-2.5-pro-preview models don't always honour responseMimeType — try with it first, fall back without
+        const makeGeminiBody = (useJsonMime) => JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+          generationConfig: {
+            ...(useJsonMime ? { responseMimeType: 'application/json' } : {}),
+            temperature: 0.2, maxOutputTokens: 1024,
+          },
         });
-        if (r.ok) { const d = await r.json(); text = d.candidates?.[0]?.content?.parts?.[0]?.text; }
+        let r = await fetch(url, { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: makeGeminiBody(true) });
+        // Some preview models reject responseMimeType — retry without it
+        if (!r.ok && r.status === 400) {
+          r = await fetch(url, { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: makeGeminiBody(false) });
+        }
+        if (r.ok) {
+          const d = await r.json();
+          text = d.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!text) {
+            const reason = d.candidates?.[0]?.finishReason;
+            const safety = d.promptFeedback?.blockReason;
+            aiError = safety ? `Gemini blocked the request: ${safety}` : reason ? `Gemini stopped early: ${reason}` : 'Gemini returned an empty response';
+          }
+        } else {
+          const d = await r.json().catch(() => ({}));
+          const msg = d?.error?.message || `HTTP ${r.status}`;
+          if (r.status === 400) aiError = `Gemini: ${msg} — the model "${model}" may not support JSON mode or the request was invalid`;
+          else if (r.status === 403) aiError = `Gemini: API key invalid or does not have access to model "${model}"`;
+          else if (r.status === 429) aiError = `Gemini: Rate limit or quota exceeded. Try again shortly or switch to a different model`;
+          else if (r.status === 404) aiError = `Gemini: Model "${model}" not found. Check the model name in AI Settings`;
+          else aiError = `Gemini error: ${msg}`;
+        }
+      } else if (provider === 'bedrock') {
+        aiError = 'AWS Bedrock is not supported in member insights yet';
       }
+    } catch (fetchErr) {
+      if (fetchErr.name === 'AbortError') aiError = 'AI request timed out (60s). The model may be slow or unavailable.';
+      else aiError = fetchErr.message || 'AI request failed';
     } finally { clearTimeout(timer); }
 
-    if (!text) return null;
-    try { return JSON.parse(text); } catch { return null; }
+    if (!text) return { data: null, error: aiError || 'AI returned an empty response' };
+    try { return { data: JSON.parse(text), error: null }; } catch { return { data: null, error: 'AI returned invalid JSON — try a different model' }; }
   } catch (err) {
     logger.error('generateMemberAISummary failed', err);
-    return null;
+    return { data: null, error: err.message || 'AI summary failed' };
   }
+}
+
+// ─── Helper: fetch member raw data (steps 1-4, no AI) ────────────────────────
+async function fetchMemberRawData(project, member, baseUrl, atFetch) {
+  // 1. Resolve display name → accountId
+  const userRes = await atFetch(
+    `${baseUrl}/rest/api/3/user/search?query=${encodeURIComponent(member)}&maxResults=10`
+  );
+  if (!userRes.ok) { const e = new Error('Could not search JIRA users.'); e.statusCode = 502; throw e; }
+  const users = await userRes.json();
+  const matched = (Array.isArray(users) ? users : []).find(u => u.displayName === member)
+    || (Array.isArray(users) && users.length > 0 ? users[0] : null);
+  if (!matched) { const e = new Error(`User "${member}" not found in JIRA.`); e.statusCode = 404; throw e; }
+  const accountId = matched.accountId;
+
+  // 2. JIRA issues updated in last 30 days
+  const since = new Date();
+  since.setDate(since.getDate() - 30);
+  const sinceStr = since.toISOString().split('T')[0];
+
+  const jql = `project = "${project}" AND assignee = "${accountId}" AND updated >= "${sinceStr}" ORDER BY updated DESC`;
+  const jiraRes = await atFetch(
+    `${baseUrl}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&maxResults=100` +
+    `&fields=summary,status,priority,updated,issuetype,labels,components`
+  );
+  if (!jiraRes.ok) {
+    const errBody = await jiraRes.json().catch(() => ({}));
+    const e = new Error(errBody?.errorMessages?.[0] || 'Could not fetch JIRA issues.'); e.statusCode = 502; throw e;
+  }
+  const jiraData = await jiraRes.json();
+  const issues = (jiraData.issues || []).map(i => ({
+    key:        i.key,
+    summary:    i.fields.summary,
+    status:     i.fields.status?.name,
+    statusCat:  i.fields.status?.statusCategory?.name,
+    priority:   i.fields.priority?.name,
+    type:       i.fields.issuetype?.name,
+    updated:    i.fields.updated?.split('T')[0],
+    labels:     i.fields.labels || [],
+    components: (i.fields.components || []).map(c => c.name),
+  }));
+
+  // 3. Confluence pages contributed in last 30 days
+  let confluencePages = [];
+  try {
+    const cql = `contributor = "${accountId}" AND lastModified >= "${sinceStr}" AND type = "page" ORDER BY lastModified DESC`;
+    const confRes = await atFetch(`${baseUrl}/wiki/rest/api/search?cql=${encodeURIComponent(cql)}&limit=25`);
+    if (confRes.ok) {
+      const confData = await confRes.json();
+      confluencePages = (confData.results || []).map(p => ({
+        id:           p.content?.id,
+        title:        p.content?.title || p.title || 'Untitled',
+        spaceName:    p.resultGlobalContainer?.title || '',
+        url:          p.content?._links?.webui
+                        ? `${baseUrl}/wiki${p.content._links.webui}`
+                        : (p.url || ''),
+        lastModified: p.lastModified?.split('T')[0],
+        excerpt:      (p.excerpt || '').replace(/<[^>]+>/g, '').slice(0, 200),
+      }));
+    }
+  } catch { /* Confluence not available — not fatal */ }
+
+  // 4. Build 30-day activity heatmap
+  const activityByDay = [];
+  const now = new Date();
+  for (let d = 29; d >= 0; d--) {
+    const date = new Date(now);
+    date.setDate(date.getDate() - d);
+    activityByDay.push({ date: date.toISOString().split('T')[0], jira: 0, confluence: 0, total: 0 });
+  }
+  const dayMap = Object.fromEntries(activityByDay.map(d => [d.date, d]));
+  issues.forEach(i => {
+    if (i.updated && dayMap[i.updated]) { dayMap[i.updated].jira += 1; dayMap[i.updated].total += 1; }
+  });
+  confluencePages.forEach(p => {
+    if (p.lastModified && dayMap[p.lastModified]) {
+      dayMap[p.lastModified].confluence += 1; dayMap[p.lastModified].total += 1;
+    }
+  });
+
+  return { accountId, issues, confluencePages, activityByDay };
 }
 
 // ─── GET /api/jira/member-summary ─────────────────────────────────────────────
 // Fetches JIRA issues + Confluence pages for a member in the last 30 days,
-// builds a 30-day activity heatmap, and calls AI for a focus summary.
-// Query params: project (JIRA key), member (JIRA display name)
+// builds a 30-day activity heatmap. Pass ?skipAi=true to skip AI (fast path).
+// Query params: project (JIRA key), member (JIRA display name), skipAi (bool)
 router.get('/member-summary', async (req, res, next) => {
   try {
-    const { project, member } = req.query;
-    if (!project?.trim() || !member?.trim()) {
+    const { project, member, skipAi } = req.query;
+    if (!project?.trim() || !member?.trim())
       return res.status(400).json({ error: 'project and member query params are required' });
-    }
 
     const settings = await loadJiraSettings(req.user.id);
-    if (!settings['jira_base_url'] || !settings['jira_email'] || !settings['jira_api_token']) {
+    if (!settings['jira_base_url'] || !settings['jira_email'] || !settings['jira_api_token'])
       return res.status(400).json({ error: 'JIRA credentials not configured.' });
-    }
 
     const baseUrl = validateAtlassianBaseUrl(settings['jira_base_url']);
     const credentials = Buffer.from(`${settings['jira_email']}:${settings['jira_api_token']}`).toString('base64');
     const headers = { 'Authorization': `Basic ${credentials}`, 'Accept': 'application/json' };
     const atFetch = (url, opts = {}) => fetch(url, { ...opts, headers: { ...headers, ...opts.headers } });
 
-    // ── 1. Resolve display name → accountId ──────────────────────────────
-    const userRes = await atFetch(
-      `${baseUrl}/rest/api/3/user/search?query=${encodeURIComponent(member)}&maxResults=10`
-    );
-    if (!userRes.ok) return res.status(502).json({ error: 'Could not search JIRA users.' });
-    const users = await userRes.json();
-    const matched = (Array.isArray(users) ? users : []).find(u => u.displayName === member)
-      || (Array.isArray(users) && users.length > 0 ? users[0] : null);
-    if (!matched) return res.status(404).json({ error: `User "${member}" not found in JIRA.` });
-    const accountId = matched.accountId;
+    let rawData;
+    try { rawData = await fetchMemberRawData(project, member, baseUrl, atFetch); }
+    catch (err) { return res.status(err.statusCode || 502).json({ error: err.message }); }
 
-    // ── 2. JIRA issues updated in last 30 days ────────────────────────────
-    const since = new Date();
-    since.setDate(since.getDate() - 30);
-    const sinceStr = since.toISOString().split('T')[0];
+    const { accountId, issues, confluencePages, activityByDay } = rawData;
 
-    const jql = `project = "${project}" AND assignee = "${accountId}" AND updated >= "${sinceStr}" ORDER BY updated DESC`;
-    const jiraRes = await atFetch(
-      `${baseUrl}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&maxResults=100` +
-      `&fields=summary,status,priority,updated,issuetype,labels,components`
-    );
-    if (!jiraRes.ok) {
-      const errBody = await jiraRes.json().catch(() => ({}));
-      return res.status(502).json({ error: errBody?.errorMessages?.[0] || 'Could not fetch JIRA issues.' });
+    let aiSummary = null, aiError = null;
+    if (skipAi !== 'true') {
+      const aiResult = await generateMemberAISummary(member, issues, confluencePages, req.user.id);
+      aiSummary = aiResult?.data || null;
+      aiError   = aiResult?.error || null;
     }
-    const jiraData = await jiraRes.json();
-    const issues = (jiraData.issues || []).map(i => ({
-      key:        i.key,
-      summary:    i.fields.summary,
-      status:     i.fields.status?.name,
-      statusCat:  i.fields.status?.statusCategory?.name,
-      priority:   i.fields.priority?.name,
-      type:       i.fields.issuetype?.name,
-      updated:    i.fields.updated?.split('T')[0],
-      labels:     i.fields.labels || [],
-      components: (i.fields.components || []).map(c => c.name),
-    }));
 
-    // ── 3. Confluence pages contributed in last 30 days ───────────────────
-    let confluencePages = [];
-    try {
-      const cql = `contributor = "${accountId}" AND lastModified >= "${sinceStr}" AND type = "page" ORDER BY lastModified DESC`;
-      const confRes = await atFetch(
-        `${baseUrl}/wiki/rest/api/search?cql=${encodeURIComponent(cql)}&limit=25`
-      );
-      if (confRes.ok) {
-        const confData = await confRes.json();
-        confluencePages = (confData.results || []).map(p => ({
-          id:           p.content?.id,
-          title:        p.content?.title || p.title || 'Untitled',
-          spaceName:    p.resultGlobalContainer?.title || '',
-          url:          p.content?._links?.webui
-                          ? `${baseUrl}/wiki${p.content._links.webui}`
-                          : (p.url || ''),
-          lastModified: p.lastModified?.split('T')[0],
-          excerpt:      (p.excerpt || '').replace(/<[^>]+>/g, '').slice(0, 200),
-        }));
-      }
-    } catch { /* Confluence may not be available — not fatal */ }
+    res.json({ member, accountId, issues, confluencePages, activityByDay, aiSummary, aiError });
+  } catch (err) {
+    if (err.name === 'AbortError') return res.status(504).json({ error: 'Request timed out.' });
+    next(err);
+  }
+});
 
-    // ── 4. Build 30-day activity heatmap ──────────────────────────────────
-    const activityByDay = [];
-    const now = new Date();
-    for (let d = 29; d >= 0; d--) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - d);
-      activityByDay.push({ date: date.toISOString().split('T')[0], jira: 0, confluence: 0, total: 0 });
-    }
-    const dayMap = Object.fromEntries(activityByDay.map(d => [d.date, d]));
-    issues.forEach(i => {
-      if (i.updated && dayMap[i.updated]) { dayMap[i.updated].jira += 1; dayMap[i.updated].total += 1; }
-    });
-    confluencePages.forEach(p => {
-      if (p.lastModified && dayMap[p.lastModified]) {
-        dayMap[p.lastModified].confluence += 1; dayMap[p.lastModified].total += 1;
-      }
-    });
+// ─── GET /api/jira/member-summary-ai ──────────────────────────────────────────
+// Returns only the AI focus summary for a member. Called in parallel with
+// /member-summary?skipAi=true so the UI can render data without waiting for AI.
+router.get('/member-summary-ai', async (req, res, next) => {
+  try {
+    const { project, member } = req.query;
+    if (!project?.trim() || !member?.trim())
+      return res.status(400).json({ error: 'project and member query params are required' });
 
-    // ── 5. AI summary (non-blocking — null if AI unavailable) ─────────────
-    const aiSummary = await generateMemberAISummary(member, issues, confluencePages, req.user.id);
+    const settings = await loadJiraSettings(req.user.id);
+    if (!settings['jira_base_url'] || !settings['jira_email'] || !settings['jira_api_token'])
+      return res.status(400).json({ error: 'JIRA credentials not configured.' });
 
-    res.json({ member, accountId, issues, confluencePages, activityByDay, aiSummary });
+    const baseUrl = validateAtlassianBaseUrl(settings['jira_base_url']);
+    const credentials = Buffer.from(`${settings['jira_email']}:${settings['jira_api_token']}`).toString('base64');
+    const headers = { 'Authorization': `Basic ${credentials}`, 'Accept': 'application/json' };
+    const atFetch = (url, opts = {}) => fetch(url, { ...opts, headers: { ...headers, ...opts.headers } });
+
+    let rawData;
+    try { rawData = await fetchMemberRawData(project, member, baseUrl, atFetch); }
+    catch (err) { return res.status(err.statusCode || 502).json({ error: err.message }); }
+
+    const { issues, confluencePages } = rawData;
+    const aiResult = await generateMemberAISummary(member, issues, confluencePages, req.user.id);
+    res.json({ aiSummary: aiResult?.data || null, aiError: aiResult?.error || null });
   } catch (err) {
     if (err.name === 'AbortError') return res.status(504).json({ error: 'Request timed out.' });
     next(err);

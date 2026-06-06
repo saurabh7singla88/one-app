@@ -22,14 +22,13 @@ const DEFAULTS = {
   ai_gemini_api_key: '',
   ai_bedrock_region: 'us-east-1',
   ai_bedrock_model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-  ai_bedrock_access_key_id: '',
-  ai_bedrock_secret_key: '',
+  ai_bedrock_api_key: '',
 };
 
 // ─── Encrypted setting keys ───────────────────────────────────────────────────
 const ENCRYPTED_SETTING_KEYS = new Set([
   'ai_openai_api_key', 'ai_gemini_api_key',
-  'ai_bedrock_access_key_id', 'ai_bedrock_secret_key',
+  'ai_bedrock_api_key',
 ]);
 
 // ─── Load AI settings: env defaults → app-level (AppSetting) → user overrides ─
@@ -81,13 +80,17 @@ async function callOllama(settings, systemPrompt, userPrompt) {
       let detail = `HTTP ${res.status}`;
       try { const errBody = await res.json(); detail = errBody.error || detail; } catch {}
       logger.error(`Ollama non-OK response`, { status: res.status, model: settings.ai_ollama_model, detail });
-      return null;
+      return { text: null, error: `Ollama error: ${detail}` };
     }
     const data = await res.json();
-    return (data.message?.content || data.response || '').trim();
+    const text = (data.message?.content || data.response || '').trim();
+    return { text: text || null, error: text ? null : 'Ollama returned an empty response.' };
   } catch (e) {
     logger.error('Ollama call failed', { error: e.message, model: settings.ai_ollama_model });
-    return null;
+    const msg = e.name === 'AbortError'
+      ? `Ollama request timed out. Make sure Ollama is running at ${ollamaBaseUrl}.`
+      : `Ollama call failed: ${e.message}`;
+    return { text: null, error: msg };
   } finally { clearTimeout(timer); }
 }
 
@@ -221,37 +224,52 @@ async function callGemini(settings, systemPrompt, userPrompt, schemaOverride = n
   return { error: 'Gemini did not respond after retries. It may be experiencing high demand — please try again shortly.' };
 }
 
-// ─── Provider: AWS Bedrock (Converse API) ─────────────────────────────────────
-// userPromptOrMessages: string (single-turn) or [{role, content:[{text}]}] array (multi-turn).
+// ─── Provider: AWS Bedrock (Converse API via API Key) ────────────────────────
+// Uses Bedrock API keys (Bearer token) — no SigV4 signing required.
+// userPromptOrMessages: string (single-turn) or [{role,content}] array (multi-turn).
 async function callBedrock(settings, systemPrompt, userPromptOrMessages) {
-  if (!settings.ai_bedrock_access_key_id || !settings.ai_bedrock_secret_key) {
-    return { text: null, error: 'AWS Bedrock credentials not configured. Add them in Admin → AI Settings.' };
+  if (!settings.ai_bedrock_api_key) {
+    return { text: null, error: 'AWS Bedrock API key not configured. Add it in Admin → AI Settings.' };
   }
+  const region = settings.ai_bedrock_region || 'us-east-1';
+  const modelId = settings.ai_bedrock_model || 'anthropic.claude-3-5-sonnet-20241022-v2:0';
+  const url = `https://bedrock-runtime.${region}.amazonaws.com/model/${encodeURIComponent(modelId)}/converse`;
+  const messages = Array.isArray(userPromptOrMessages)
+    ? userPromptOrMessages
+    : [{ role: 'user', content: [{ text: userPromptOrMessages }] }];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT);
   try {
-    const { BedrockRuntimeClient, ConverseCommand } = await import('@aws-sdk/client-bedrock-runtime');
-    const client = new BedrockRuntimeClient({
-      region: settings.ai_bedrock_region || 'us-east-1',
-      credentials: {
-        accessKeyId: settings.ai_bedrock_access_key_id,
-        secretAccessKey: settings.ai_bedrock_secret_key,
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${settings.ai_bedrock_api_key}`,
       },
+      signal: controller.signal,
+      body: JSON.stringify({
+        system: [{ text: systemPrompt }],
+        messages,
+        inferenceConfig: { maxTokens: 4096, temperature: 0.1 },
+      }),
     });
-    const messages = Array.isArray(userPromptOrMessages)
-      ? userPromptOrMessages
-      : [{ role: 'user', content: [{ text: userPromptOrMessages }] }];
-    const cmd = new ConverseCommand({
-      modelId: settings.ai_bedrock_model || 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-      system: [{ text: systemPrompt }],
-      messages,
-      inferenceConfig: { maxTokens: 4096, temperature: 0.1 },
-    });
-    const resp = await client.send(cmd);
-    const text = resp.output?.message?.content?.[0]?.text?.trim() ?? null;
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`;
+      try { const e = await res.json(); detail = e?.message || e?.error?.message || detail; } catch {}
+      if (res.status === 401 || res.status === 403) detail = `API key invalid or lacks bedrock:InvokeModel permission (${res.status})`;
+      else if (res.status === 404) detail = `Model "${modelId}" not found in region ${region}`;
+      else if (res.status === 429) detail = 'Rate limit exceeded — try again shortly';
+      logger.error('Bedrock non-OK response', { status: res.status, model: modelId, region });
+      return { text: null, error: `Bedrock error: ${detail}` };
+    }
+    const data = await res.json();
+    const text = data.output?.message?.content?.[0]?.text?.trim() ?? null;
     return { text, error: text ? null : 'Bedrock returned an empty response.' };
   } catch (e) {
-    logger.error('Bedrock call failed', { error: e.message, model: settings.ai_bedrock_model });
-    return { text: null, error: `Bedrock error: ${e.message}` };
-  }
+    logger.error('Bedrock call failed', { error: e.message, model: modelId });
+    const msg = e.name === 'AbortError' ? 'Bedrock request timed out.' : `Bedrock call failed: ${e.message}`;
+    return { text: null, error: msg };
+  } finally { clearTimeout(timer); }
 }
 
 // ─── LLM urgency analyser (provider-agnostic) ─────────────────────────────────
@@ -287,24 +305,28 @@ Be generous: if ANY urgency is implied or suggested, score it above 30.`;
   const userPrompt = `Rate the urgency expressed in these initiative descriptions:\n${JSON.stringify(payload, null, 2)}`;
 
   let rawText = null;
-  if (provider === 'ollama') rawText = await callOllama(settings, systemPrompt, userPrompt);
-  else if (provider === 'openai' || provider === 'openai_compatible') {
+  let llmError = null;
+  if (provider === 'ollama') {
+    const r = await callOllama(settings, systemPrompt, userPrompt);
+    rawText = r.text;
+    if (r.error) { llmError = r.error; logger.warn('Ollama urgency analysis failed', { error: r.error }); }
+  } else if (provider === 'openai') {
     const r = await callOpenAI(settings, systemPrompt, userPrompt, true);
     rawText = r.text || null;
-    if (r.error) logger.warn('OpenAI urgency analysis failed', { error: r.error });
+    if (r.error) { llmError = r.error; logger.warn('OpenAI urgency analysis failed', { error: r.error }); }
   } else if (provider === 'gemini') {
     const r = await callGemini(settings, systemPrompt, userPrompt, null);
     rawText = r.text || null;
-    if (r.error) logger.warn('Gemini urgency analysis failed', { error: r.error });
+    if (r.error) { llmError = r.error; logger.warn('Gemini urgency analysis failed', { error: r.error }); }
   } else if (provider === 'bedrock') {
     const r = await callBedrock(settings, systemPrompt, userPrompt);
     rawText = r.text || null;
-    if (r.error) logger.warn('Bedrock urgency analysis failed', { error: r.error });
+    if (r.error) { llmError = r.error; logger.warn('Bedrock urgency analysis failed', { error: r.error }); }
   }
 
   if (!rawText) {
     logger.warn(`LLM urgency analysis returned no response`, { provider });
-    return { map: {}, provider };
+    return { map: {}, provider, llmError };
   }
 
   try {
@@ -327,10 +349,10 @@ Be generous: if ANY urgency is implied or suggested, score it above 30.`;
         reason: (entry.reason || 'Urgency detected in description').slice(0, 80),
       };
     }
-    return { map, provider };
+    return { map, provider, llmError };
   } catch (e) {
     logger.warn('Failed to parse LLM urgency response', { provider, error: e.message });
-    return { map: {}, provider };
+    return { map: {}, provider, llmError };
   }
 }
 
@@ -465,10 +487,8 @@ router.get('/settings', async (req, res, next) => {
       geminiApiKeySet: !!s.ai_gemini_api_key,
       bedrockRegion: s.ai_bedrock_region,
       bedrockModel: s.ai_bedrock_model,
-      bedrockAccessKeyId: mask(s.ai_bedrock_access_key_id),
-      bedrockAccessKeyIdSet: !!s.ai_bedrock_access_key_id,
-      bedrockSecretKey: mask(s.ai_bedrock_secret_key),
-      bedrockSecretKeySet: !!s.ai_bedrock_secret_key,
+      bedrockApiKey: mask(s.ai_bedrock_api_key),
+      bedrockApiKeySet: !!s.ai_bedrock_api_key,
     });
   } catch (err) { next(err); }
 });
@@ -478,7 +498,7 @@ router.get('/settings', async (req, res, next) => {
 // ─────────────────────────────────────────────
 router.put('/settings', async (req, res, next) => {
   try {
-    const { provider, ollamaBaseUrl, ollamaModel, openaiBaseUrl, openaiModel, openaiApiKey, geminiModel, geminiApiKey, bedrockRegion, bedrockModel, bedrockAccessKeyId, bedrockSecretKey } = req.body;
+    const { provider, ollamaBaseUrl, ollamaModel, openaiBaseUrl, openaiModel, openaiApiKey, geminiModel, geminiApiKey, bedrockRegion, bedrockModel, bedrockApiKey } = req.body;
     const userId = req.user.id;
     const updates = {};
     if (provider != null) updates.ai_provider = provider;
@@ -493,10 +513,8 @@ router.put('/settings', async (req, res, next) => {
       updates.ai_gemini_api_key = safeEncrypt(geminiApiKey);
     if (bedrockRegion != null) updates.ai_bedrock_region = bedrockRegion;
     if (bedrockModel != null) updates.ai_bedrock_model = bedrockModel;
-    if (bedrockAccessKeyId != null && bedrockAccessKeyId !== '' && !bedrockAccessKeyId.startsWith('•'))
-      updates.ai_bedrock_access_key_id = safeEncrypt(bedrockAccessKeyId);
-    if (bedrockSecretKey != null && bedrockSecretKey !== '' && !bedrockSecretKey.startsWith('•'))
-      updates.ai_bedrock_secret_key = safeEncrypt(bedrockSecretKey);
+    if (bedrockApiKey != null && bedrockApiKey !== '' && !bedrockApiKey.startsWith('•'))
+      updates.ai_bedrock_api_key = safeEncrypt(bedrockApiKey);
 
     await Promise.all(
       Object.entries(updates).map(([key, value]) =>
@@ -548,7 +566,7 @@ router.get('/suggestions', async (req, res, next) => {
     for (const item of initiatives) childrenMap[item.id] = item.children || [];
 
     const settings = await loadAISettings(req.user.id);
-    const { map: llmMap, provider: llmProvider } = await analyseWithLLM(initiatives, settings);
+    const { map: llmMap, provider: llmProvider, llmError: llmProviderError } = await analyseWithLLM(initiatives, settings);
     const llmUsed = Object.keys(llmMap).length > 0;
 
     // Score every initiative
@@ -579,6 +597,7 @@ router.get('/suggestions', async (req, res, next) => {
       analysedCount: initiatives.length,
       llmUsed,
       llmProvider: llmUsed ? llmProvider : null,
+      llmError: llmProviderError || null,
       generatedAt: new Date().toISOString(),
     });
   } catch (err) {
@@ -631,8 +650,10 @@ ${body}`;
 
   let rawText = null;
   let llmError = null;
-  if (provider === 'ollama')            rawText = await callOllama(settings, systemPrompt, userPrompt);
-  else if (provider === 'openai' || provider === 'openai_compatible') {
+  if (provider === 'ollama') {
+    const r = await callOllama(settings, systemPrompt, userPrompt);
+    rawText = r.text; if (r.error) llmError = r.error;
+  } else if (provider === 'openai') {
     const r = await callOpenAI(settings, systemPrompt, userPrompt, true);
     if (r.error) llmError = r.error;
     else rawText = r.text;
@@ -735,8 +756,8 @@ Be concise and factual. Omit sections that have no relevant content.`;
 
     let rawText = null;
     let llmError = null;
-    if (provider === 'ollama') rawText = await callOllama(settings, systemPrompt, userPrompt);
-    else if (provider === 'openai' || provider === 'openai_compatible') {
+    if (provider === 'ollama') { const r = await callOllama(settings, systemPrompt, userPrompt); rawText = r.text; if (r.error) llmError = r.error; }
+    else if (provider === 'openai') {
       const r = await callOpenAI(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
@@ -784,8 +805,8 @@ router.post('/rephrase', async (req, res, next) => {
     let rawText = null;
     let llmError = null;
 
-    if (provider === 'ollama') rawText = await callOllama(settings, systemPrompt, userPrompt);
-    else if (provider === 'openai' || provider === 'openai_compatible') {
+    if (provider === 'ollama') { const r = await callOllama(settings, systemPrompt, userPrompt); rawText = r.text; if (r.error) llmError = r.error; }
+    else if (provider === 'openai') {
       const r = await callOpenAI(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
@@ -939,8 +960,8 @@ METRICS:
 ${metrics}`;
 
     let rawText = null, llmError = null;
-    if (provider === 'ollama') rawText = await callOllama(settings, systemPrompt, userPrompt);
-    else if (provider === 'openai' || provider === 'openai_compatible') {
+    if (provider === 'ollama') { const r = await callOllama(settings, systemPrompt, userPrompt); rawText = r.text; if (r.error) llmError = r.error; }
+    else if (provider === 'openai') {
       const r = await callOpenAI(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
@@ -1185,8 +1206,8 @@ router.post('/summarize-item', async (req, res, next) => {
 
     let rawText = null;
     let llmError = null;
-    if (provider === 'ollama') rawText = await callOllama(settings, systemPrompt, userPrompt);
-    else if (provider === 'openai' || provider === 'openai_compatible') {
+    if (provider === 'ollama') { const r = await callOllama(settings, systemPrompt, userPrompt); rawText = r.text; if (r.error) llmError = r.error; }
+    else if (provider === 'openai') {
       const r = await callOpenAI(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
@@ -1264,8 +1285,8 @@ Be concise and factual. Only include sections with relevant content.`;
 
     let rawText = null;
     let llmError = null;
-    if (provider === 'ollama') rawText = await callOllama(settings, systemPrompt, userPrompt);
-    else if (provider === 'openai' || provider === 'openai_compatible') {
+    if (provider === 'ollama') { const r = await callOllama(settings, systemPrompt, userPrompt); rawText = r.text; if (r.error) llmError = r.error; }
+    else if (provider === 'openai') {
       const r = await callOpenAI(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
@@ -1333,8 +1354,8 @@ router.post('/action-on-items', async (req, res, next) => {
 
     let rawText = null;
     let llmError = null;
-    if (provider === 'ollama') rawText = await callOllama(settings, systemPrompt, userPrompt);
-    else if (provider === 'openai' || provider === 'openai_compatible') {
+    if (provider === 'ollama') { const r = await callOllama(settings, systemPrompt, userPrompt); rawText = r.text; if (r.error) llmError = r.error; }
+    else if (provider === 'openai') {
       const r = await callOpenAI(settings, systemPrompt, userPrompt, false);
       if (r.error) llmError = r.error;
       else rawText = r.text;
@@ -1435,7 +1456,7 @@ GUIDELINES:
           rawText = (d.message?.content || d.response || '').trim();
         } else { logger.error('Ollama chat non-OK', { status: r.status }); }
       } finally { clearTimeout(timer); }
-    } else if (provider === 'openai' || provider === 'openai_compatible') {
+    } else if (provider === 'openai') {
       if (settings.ai_openai_api_key) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT);

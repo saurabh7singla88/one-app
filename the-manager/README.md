@@ -39,8 +39,8 @@ JWT_SECRET=                    # generate: openssl rand -hex 32
 # ── Database — pick one ───────────────────────────────────────────────────────
 TURSO_DATABASE_URL=libsql://your-db.turso.io
 TURSO_AUTH_TOKEN=your-turso-auth-token
-# -- OR local SQLite:
-# DATABASE_URL=file:/data/app.db   (also add a volume mount — see docker-compose.yml)
+# -- OR local SQLite (comment out the two TURSO lines above and uncomment this):
+# DATABASE_URL=file:/data/app.db
 
 # ── Optional but recommended ──────────────────────────────────────────────────
 TOKEN_ENCRYPTION_KEY=          # generate: openssl rand -hex 32
@@ -71,14 +71,25 @@ docker run -d \
   --env-file .env \
   nebrix001/one-app:latest
 
-# Local SQLite — mount a folder so data survives container restarts
+# Local SQLite — data is saved to a folder on your machine
+#
+# 1. In your .env, comment out TURSO lines and set:
+#      DATABASE_URL=file:/data/app.db
+#      # TURSO_DATABASE_URL=
+#      # TURSO_AUTH_TOKEN=
+#
+# 2. Create the data folder on your machine:
+mkdir -p "$(pwd)/data"
+#
+# 3. Run with the volume mount (-v maps ./data on your machine to /data in the container):
 docker run -d \
   --name one-app \
   -p 3000:47421 \
   -v "$(pwd)/data:/data" \
-  -e DATABASE_URL=file:/data/app.db \
   --env-file .env \
   nebrix001/one-app:latest
+#
+# Your database file will appear at: ./data/app.db
 
 # Custom port (e.g. 8080)
 docker run -d \
@@ -191,14 +202,25 @@ docker run -d \
   --env-file .env \
   nebrix001/one-app:latest
 
-# Local SQLite — mount a folder so data survives container restarts
+# Local SQLite — data is saved to a folder on your machine
+#
+# 1. In your .env, comment out TURSO lines and set:
+#      DATABASE_URL=file:/data/app.db
+#      # TURSO_DATABASE_URL=
+#      # TURSO_AUTH_TOKEN=
+#
+# 2. Create the data folder on your machine:
+mkdir -p "$(pwd)/data"
+#
+# 3. Run with the volume mount (-v maps ./data on your machine to /data in the container):
 docker run -d \
   --name one-app \
   -p 3000:47421 \
   -v "$(pwd)/data:/data" \
-  -e DATABASE_URL=file:/data/app.db \
   --env-file .env \
   nebrix001/one-app:latest
+#
+# Your database file will appear at: ./data/app.db
 
 # Custom port (e.g. 8080)
 docker run -d \
@@ -252,6 +274,7 @@ Then access the app at `http://localhost:8080`.
 | `TURSO_DATABASE_URL` | One of two | Turso / libsql URL, e.g. `libsql://your-db.turso.io` |
 | `TURSO_AUTH_TOKEN` | If using Turso | Auth token from Turso dashboard |
 | `DATABASE_URL` | One of two | Local SQLite path, e.g. `file:/data/app.db`. Mount a volume for persistence. |
+| `DATA_DIR` | No | Host folder mounted to `/data` in the container. Default: `./data` (next to `docker-compose.yml`). Override to store the DB elsewhere, e.g. `DATA_DIR=/opt/one-app/data`. |
 | `TOKEN_ENCRYPTION_KEY` | No | 64-char hex key for encrypting stored Gmail / JIRA / AI credentials. |
 | `ALLOWED_ORIGINS` | No | CORS origins, default `http://localhost:3000` |
 | `APP_PORT` | No | Host port the app is exposed on, default `3000`. Set in `.env` alongside `docker-compose.yml`. |

@@ -14,14 +14,15 @@ services:
     ports:
       - "${APP_PORT:-3000}:47421"
     volumes:
-      - db-data:/data
+      - ${DATA_DIR:-./data}:/data
     environment:
       NODE_ENV: production
       # Turso runtime connection — required for web deployment
       TURSO_DATABASE_URL: ${TURSO_DATABASE_URL}
       TURSO_AUTH_TOKEN: ${TURSO_AUTH_TOKEN}
       # Local SQLite fallback — used when TURSO_DATABASE_URL is not set.
-      # The file lives in the named volume so it survives container restarts/removals.
+      # Data is stored in DATA_DIR (default: ./data next to docker-compose.yml).
+      # Override DATA_DIR in .env to store the DB anywhere on the host.
       DATABASE_URL: ${DATABASE_URL:-file:/data/app.db}
       # JWT secret for session tokens
       JWT_SECRET: ${JWT_SECRET}
@@ -39,6 +40,3 @@ services:
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
-
-volumes:
-  db-data:
