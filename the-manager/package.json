@@ -1,6 +1,7 @@
 {
   "name": "the-manager",
   "version": "1.0.0",
+  "type": "module",
   "author": "Saurabh Singla",
   "license": "MIT",
   "private": true,
@@ -12,6 +13,8 @@
     "docker:logs":    "docker compose logs -f --tail=50",
     "docker:ps":      "docker compose ps",
     "docker:publish": "docker compose build && docker tag the-manager-app:latest nebrix001/one-app:latest && docker push nebrix001/one-app:latest",
+    "docker:pushrm":  "docker pushrm nebrix001/one-app",
+    "docker:pushrm:api": "node scripts/push-dockerhub-readme.js",
     "docker:export":  "docker save the-manager-app:latest -o one-app.tar && echo 'Saved to one-app.tar'"
   }
 }
