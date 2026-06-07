@@ -142,6 +142,28 @@ All optional. Features that aren't configured stay hidden from the sidebar.
 
 ---
 
+## Best Practices
+
+**Always set `TOKEN_ENCRYPTION_KEY`** — especially when using Turso or any cloud database.
+Without it, Gmail App Passwords, JIRA tokens, and AI API keys are stored in plaintext in the database.
+Generate one with:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+**Use a strong `JWT_SECRET`** — at least 32 random bytes. Never reuse a secret across deployments.
+
+**Use a `.env` file instead of `-e` flags** — avoids secrets appearing in shell history and `docker inspect` output.
+
+**For Turso** — treat your `TURSO_AUTH_TOKEN` like a password. Rotate it from the Turso dashboard if it's ever exposed.
+
+**For local SQLite** — always mount a volume (`-v ./data:/data`). Without it, all data is lost when the container is removed.
+
+**ALLOWED_ORIGINS must match your browser URL exactly** — including the port. If you change the port, update this variable too or you'll get CORS errors on login.
+
+---
+
 ## License
 
 MIT
