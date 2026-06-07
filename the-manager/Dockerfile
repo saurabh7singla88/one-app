@@ -53,6 +53,9 @@ COPY backend/prisma ./prisma
 # Copy frontend build output served as static files by the backend
 COPY --from=frontend-build /app/frontend/dist ./public
 
+# Ensure the default SQLite data directory exists so the app works without a volume mount
+RUN mkdir -p /data
+
 EXPOSE 47421
 
 CMD ["node", "src/server.bundle.mjs"]

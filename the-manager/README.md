@@ -61,7 +61,24 @@ echo "TOKEN_ENCRYPTION_KEY=$(openssl rand -hex 32)"
 
 ### Step 4 — Start the app
 
-**From Docker Hub (quickest — no build step):**
+**⚡ Quick start (zero config — SQLite, data lost on container removal):**
+
+```bash
+docker run -d \
+  --name one-app \
+  -p 3001:47421 \
+  -v "$(pwd)/data:/data" \
+  -e JWT_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))") \
+  -e ALLOWED_ORIGINS=http://localhost:3001 \
+  nebrix001/one-app:latest
+```
+
+Open **http://localhost:3001**, register your account, and go.
+> Data lives inside the container. Add `-v ./data:/data` to persist it to your machine.
+
+---
+
+**From Docker Hub (recommended — with `.env` file):**
 
 ```bash
 # Turso DB
@@ -92,6 +109,9 @@ docker run -d \
 # Your database file will appear at: ./data/app.db
 
 # Custom port (e.g. 8080)
+# ⚠️  Update ALLOWED_ORIGINS and PUBLIC_URL in your .env to match the port:
+#      ALLOWED_ORIGINS=http://localhost:8080
+#      PUBLIC_URL=http://localhost:8080
 docker run -d \
   --name one-app \
   -p 8080:47421 \
@@ -223,6 +243,9 @@ docker run -d \
 # Your database file will appear at: ./data/app.db
 
 # Custom port (e.g. 8080)
+# ⚠️  Update ALLOWED_ORIGINS and PUBLIC_URL in your .env to match the port:
+#      ALLOWED_ORIGINS=http://localhost:8080
+#      PUBLIC_URL=http://localhost:8080
 docker run -d \
   --name one-app \
   -p 8080:47421 \

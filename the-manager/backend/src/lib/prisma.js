@@ -26,14 +26,21 @@ async function createPrismaClient() {
   const { PrismaLibSql } = await import('@prisma/adapter-libsql');
 
   const tursoUrl = process.env.TURSO_DATABASE_URL ?? '';
-  const fileUrl  = process.env.DATABASE_URL ?? '';
+  let   fileUrl  = process.env.DATABASE_URL ?? '';
 
   const isRemote = tursoUrl.startsWith('libsql://') || tursoUrl.startsWith('libsql+wss://');
-  const isFile   = fileUrl.startsWith('file:');
+  let   isFile   = fileUrl.startsWith('file:');
 
+  // Auto-fallback: if no database is configured at all, default to a local SQLite
+  // file at /data/app.db so the app works out-of-the-box with a single volume mount:
+  //   docker run -p 3000:47421 -v ./data:/data <image>
   if (!isRemote && !isFile) {
-    throw new Error(
-      'No database configured. Set TURSO_DATABASE_URL (web) or DATABASE_URL=file:/path (desktop).'
+    fileUrl = 'file:/data/app.db';
+    isFile  = true;
+    console.warn(
+      '[db] No TURSO_DATABASE_URL or DATABASE_URL set — ' +
+      'defaulting to local SQLite at /data/app.db. ' +
+      'Mount a host directory to preserve data: -v ./data:/data'
     );
   }
 
