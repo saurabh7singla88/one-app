@@ -25,15 +25,17 @@ aws ecr get-login-password --region "$AWS_REGION" \
 echo "▸ Creating ECR repo (idempotent)"
 aws ecr create-repository --repository-name "$ECR_REPO" --region "$AWS_REGION" 2>/dev/null || true
 
-echo "▸ Build → ${IMAGE_URI}"
-docker build --platform linux/amd64 \
+echo "▸ Ensure buildx builder with multi-platform support"
+docker buildx inspect multiplatform-builder &>/dev/null \
+  || docker buildx create --name multiplatform-builder --use
+docker buildx use multiplatform-builder
+
+echo "▸ Build + push → ${IMAGE_URI} (linux/amd64 + linux/arm64)"
+docker buildx build --platform linux/amd64,linux/arm64 \
   --build-arg VITE_API_URL="$VITE_API_URL" \
   --build-arg VITE_ENABLE_MEMBER_INSIGHTS="$VITE_ENABLE_MEMBER_INSIGHTS" \
   --build-arg VITE_APP_AUTHOR="$VITE_APP_AUTHOR" \
-  -t "$IMAGE_URI" "$SCRIPT_DIR"
-
-echo "▸ Push"
-docker push "$IMAGE_URI"
+  -t "$IMAGE_URI" --push "$SCRIPT_DIR"
 
 echo "▸ Namespace"
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
