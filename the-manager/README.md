@@ -6,7 +6,19 @@ An AI-powered initiative tracker, task manager, and personal workspace — with 
 
 ---
 
-## Option 1 — Local SQLite (quickest, no account needed)
+## ⚡ Quickest start — Docker Desktop GUI
+
+1. Open Docker Desktop → search **`nebrix001/one-app`** → Pull → **Run**
+2. Set host port to any free port (e.g. **3000**) → 47421
+3. Click **Run** → open **http://localhost:3000** (or whichever port you chose)
+
+No environment variables needed — the app auto-configures for any localhost port.
+
+> ⚠️ **Data is not persistent** when running from the Docker Desktop GUI — all your data will be lost if the container is removed. For persistent data, use the terminal commands below.
+
+---
+
+## Option 1 — Local SQLite (persistent, no account needed)
 
 Data is stored in a folder on your machine. No sign-up required.
 
