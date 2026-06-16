@@ -665,6 +665,7 @@ Analyze the above and return the JSON summary.`;
     const timer = setTimeout(() => controller.abort(), 60_000);
     let text = null;
     let aiError = null;
+    let usedModel = null;
     try {
       if (provider === 'ollama') {
         const r = await fetch(`${s.ai_ollama_base_url}/api/chat`, {
@@ -675,6 +676,7 @@ Analyze the above and return the JSON summary.`;
             messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
           }),
         });
+        usedModel = s.ai_ollama_model;
         if (r.ok) { const d = await r.json(); text = d.message?.content || d.response; }
         else { aiError = `Ollama error: HTTP ${r.status}. Make sure Ollama is running and the model is available.`; }
       } else if (provider === 'openai') {
@@ -688,6 +690,7 @@ Analyze the above and return the JSON summary.`;
             messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
           }),
         });
+        usedModel = s.ai_openai_model;
         if (r.ok) { const d = await r.json(); text = d.choices?.[0]?.message?.content; }
         else {
           const d = await r.json().catch(() => ({}));
@@ -695,6 +698,7 @@ Analyze the above and return the JSON summary.`;
         }
       } else if (provider === 'gemini') {
         const model = s.ai_gemini_model || 'gemini-1.5-flash';
+        usedModel = model;
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${s.ai_gemini_api_key}`;
         // gemini-2.5-pro-preview models don't always honour responseMimeType — try with it first, fall back without
         const makeGeminiBody = (useJsonMime) => JSON.stringify({
@@ -733,6 +737,7 @@ Analyze the above and return the JSON summary.`;
         } else {
           const region  = s.ai_bedrock_region || 'us-east-1';
           const modelId = s.ai_bedrock_model  || 'anthropic.claude-3-5-sonnet-20241022-v2:0';
+          usedModel = modelId;
           const url = `https://bedrock-runtime.${region}.amazonaws.com/model/${encodeURIComponent(modelId)}/converse`;
           const r = await fetch(url, {
             method: 'POST',
@@ -763,6 +768,7 @@ Analyze the above and return the JSON summary.`;
       else aiError = fetchErr.message || 'AI request failed';
     } finally { clearTimeout(timer); }
 
+    if (text) logger.info('Member Insights AI call succeeded', { provider, model: usedModel, member: memberName });
     if (!text) return { data: null, error: aiError || 'AI returned an empty response' };
     try { return { data: JSON.parse(text), error: null }; } catch { return { data: null, error: 'AI returned invalid JSON — try a different model' }; }
   } catch (err) {

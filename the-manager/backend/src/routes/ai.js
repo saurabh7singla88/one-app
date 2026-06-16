@@ -84,6 +84,7 @@ async function callOllama(settings, systemPrompt, userPrompt) {
     }
     const data = await res.json();
     const text = (data.message?.content || data.response || '').trim();
+    if (text) logger.info('AI call succeeded', { provider: 'ollama', model: settings.ai_ollama_model });
     return { text: text || null, error: text ? null : 'Ollama returned an empty response.' };
   } catch (e) {
     logger.error('Ollama call failed', { error: e.message, model: settings.ai_ollama_model });
@@ -122,6 +123,7 @@ async function callOpenAI(settings, systemPrompt, userPrompt, jsonMode = true) {
     }
     const data = await res.json();
     const text = data.choices?.[0]?.message?.content?.trim() || null;
+    if (text) logger.info('AI call succeeded', { provider: 'openai', model: settings.ai_openai_model });
     return { text, error: text ? null : 'OpenAI returned an empty response.' };
   } catch (e) {
     logger.error('OpenAI call failed', e);
@@ -206,6 +208,7 @@ async function callGemini(settings, systemPrompt, userPrompt, schemaOverride = n
         logger.warn('Gemini returned no text', { finishReason: reason, promptFeedback: data?.promptFeedback });
         return { error: `Gemini returned no content (finishReason: ${reason})` };
       }
+      logger.info('AI call succeeded', { provider: 'gemini', model });
       return { text };
     } catch (e) {
       if (e.name === 'AbortError') {
@@ -264,6 +267,7 @@ async function callBedrock(settings, systemPrompt, userPromptOrMessages) {
     }
     const data = await res.json();
     const text = data.output?.message?.content?.[0]?.text?.trim() ?? null;
+    if (text) logger.info('AI call succeeded', { provider: 'bedrock', model: modelId });
     return { text, error: text ? null : 'Bedrock returned an empty response.' };
   } catch (e) {
     logger.error('Bedrock call failed', { error: e.message, model: modelId });

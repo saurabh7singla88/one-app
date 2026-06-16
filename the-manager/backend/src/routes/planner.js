@@ -101,7 +101,9 @@ async function callLLM(settings, systemPrompt, userPrompt) {
       });
       if (!res.ok) return { text: null, error: `Ollama HTTP ${res.status}` };
       const data = await res.json();
-      return { text: (data.message?.content || data.response || '').trim(), error: null };
+      const text = (data.message?.content || data.response || '').trim();
+      if (text) logger.info('AI call succeeded', { provider: 'ollama', model: settings.ai_ollama_model });
+      return { text, error: null };
     }
 
     if (provider === 'openai') {
@@ -120,6 +122,7 @@ async function callLLM(settings, systemPrompt, userPrompt) {
       if (!res.ok) return { text: null, error: `OpenAI HTTP ${res.status}` };
       const data = await res.json();
       const text = data.choices?.[0]?.message?.content?.trim() || null;
+      if (text) logger.info('AI call succeeded', { provider: 'openai', model: settings.ai_openai_model });
       return { text, error: text ? null : 'OpenAI returned empty response.' };
     }
 
@@ -138,6 +141,7 @@ async function callLLM(settings, systemPrompt, userPrompt) {
       if (!res.ok) return { text: null, error: `Gemini HTTP ${res.status}` };
       const data = await res.json();
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+      if (text) logger.info('AI call succeeded', { provider: 'gemini', model: settings.ai_gemini_model || 'gemini-1.5-flash' });
       return { text, error: text ? null : 'Gemini returned empty response.' };
     }
     if (provider === 'bedrock') {
@@ -159,6 +163,7 @@ async function callLLM(settings, systemPrompt, userPrompt) {
       });
       const resp = await client.send(cmd);
       const text = resp.output?.message?.content?.[0]?.text?.trim() ?? null;
+      if (text) logger.info('AI call succeeded', { provider: 'bedrock', model: settings.ai_bedrock_model || 'anthropic.claude-3-5-sonnet-20241022-v2:0' });
       return { text, error: text ? null : 'Bedrock returned empty response.' };
     }
     return { text: null, error: `Unknown AI provider: ${provider}` };
