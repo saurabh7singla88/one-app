@@ -25,19 +25,36 @@ import { prisma } from './lib/prisma.js';
 
 dotenv.config();
 
+// Auto-generate JWT_SECRET if not set so the app works zero-config from Docker Desktop.
+// Sessions will be invalidated on container restart when using an ephemeral secret.
+if (!process.env.JWT_SECRET) {
+  const { randomBytes } = await import('crypto');
+  process.env.JWT_SECRET = randomBytes(32).toString('hex');
+  console.warn(
+    '[auth] JWT_SECRET not set — generated an ephemeral secret. ' +
+    'Sessions will be lost on container restart. Set JWT_SECRET in your .env for persistence.'
+  );
+}
+
 const app = express();
 const PORT = process.env.PORT || 47421;
 
 // Middleware
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173'];
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
+// If ALLOWED_ORIGINS is not explicitly set, allow all localhost origins (any port).
+// This makes the Docker Desktop "Run" flow work regardless of which host port the user picks.
+const localhostFallback = allowedOrigins.length === 0;
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (Electron file:// sends Origin: null, or same-origin server calls)
-    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
-      callback(null, true);
-    } else {
-      callback(new Error(`CORS: origin '${origin}' not allowed`));
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes('*')) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    // Fallback: allow any localhost / 127.0.0.1 origin when ALLOWED_ORIGINS is not configured
+    if (localhostFallback && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return callback(null, true);
     }
+    callback(new Error(`CORS: origin '${origin}' not allowed`));
   },
   credentials: true
 }));
@@ -87,7 +104,17 @@ app.use(errorHandler);
 export function startServer() {
   return new Promise((resolve, reject) => {
     const server = app.listen(PORT, () => {
-      console.log(`🚀 Server running on http://localhost:${PORT}`);
+      // PUBLIC_URL is set by the user and reflects the actual host-side URL.
+      // Inside Docker the process only knows the internal port (47421), not the host-mapped port.
+      const publicUrl = process.env.PUBLIC_URL || null;
+      if (publicUrl) {
+        console.log(`🚀 Server running on ${publicUrl}`);
+      } else {
+        console.log(`🚀 Server listening on internal port ${PORT}`);
+        console.log(`🌐 To find your host port, run:  docker port one-app`);
+        console.log(`   Then open http://localhost:<that-port> in your browser.`);
+        console.log(`   Tip: set PUBLIC_URL=http://localhost:<port> to see the URL here on startup.`);
+      }
       console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
       resolve(server);
     });

@@ -6,7 +6,19 @@ An AI-powered initiative tracker, task manager, and personal workspace — with 
 
 ---
 
-## Option 1 — Local SQLite (quickest, no account needed)
+## ⚡ Quickest start — Docker Desktop GUI
+
+1. Open Docker Desktop → search **`nebrix001/one-app`** → Pull → **Run**
+2. Set host port to any free port (e.g. **3000**) → 47421
+3. Click **Run** → open **http://localhost:3000** (or whichever port you chose)
+
+No environment variables needed — the app auto-configures for any localhost port.
+
+> ⚠️ **Data is not persistent** when running from the Docker Desktop GUI — all your data will be lost if the container is removed. For persistent data, use the terminal commands below.
+
+---
+
+## Option 1 — Local SQLite (persistent, no account needed)
 
 Data is stored in a folder on your machine. No sign-up required.
 
@@ -161,6 +173,23 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 **For local SQLite** — always mount a volume (`-v ./data:/data`). Without it, all data is lost when the container is removed.
 
 **ALLOWED_ORIGINS must match your browser URL exactly** — including the port. If you change the port, update this variable too or you'll get CORS errors on login.
+
+---
+
+## Screenshots
+
+<table>
+  <tr>
+    <td><a href="https://nebrix.me/images/one/web-0.png"><img src="https://nebrix.me/images/one/web-0.png" width="253"/></a></td>
+    <td><a href="https://nebrix.me/images/one/web-1.png"><img src="https://nebrix.me/images/one/web-1.png" width="253"/></a></td>
+    <td><a href="https://nebrix.me/images/one/web-4.png"><img src="https://nebrix.me/images/one/web-4.png" width="253"/></a></td>
+  </tr>
+  <tr>
+    <td><a href="https://nebrix.me/images/one/web-2.png"><img src="https://nebrix.me/images/one/web-2.png" width="253"/></a></td>
+    <td><a href="https://nebrix.me/images/one/web-6.png"><img src="https://nebrix.me/images/one/web-6.png" width="253"/></a></td>
+    <td><a href="https://nebrix.me/images/one/web-5.png"><img src="https://nebrix.me/images/one/web-5.png" width="253"/></a></td>
+  </tr>
+</table>
 
 ---
 
