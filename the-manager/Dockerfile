@@ -53,19 +53,6 @@ COPY --from=frontend-build /app/frontend/dist ./public
 # Ensure the default SQLite data directory exists so the app works without a volume mount
 RUN mkdir -p /data
 
-# Docker image labels — shown as hints in Docker Desktop and docker inspect
-LABEL org.opencontainers.image.title="One"
-LABEL org.opencontainers.image.description="AI-powered initiative tracker & personal workspace"
-LABEL org.opencontainers.image.source="https://github.com/saurabh7singla88/one-app"
-LABEL org.opencontainers.image.licenses="MIT"
-LABEL com.docker.desktop.extension.api.version="1.0.0"
-# Document env vars so Docker Desktop's "Run" dialog can surface them
-LABEL com.nebrix.env.JWT_SECRET="Required: signs session tokens. Auto-generated if not set (sessions reset on restart)."
-LABEL com.nebrix.env.ALLOWED_ORIGINS="URL you open in the browser, e.g. http://localhost:3000. Must match the port you map."
-LABEL com.nebrix.env.TURSO_DATABASE_URL="Optional: Turso cloud DB URL (libsql://...). Defaults to local SQLite at /data/app.db."
-LABEL com.nebrix.env.TURSO_AUTH_TOKEN="Required if using TURSO_DATABASE_URL."
-LABEL com.nebrix.env.TOKEN_ENCRYPTION_KEY="Recommended: 64-char hex key to encrypt stored Gmail/JIRA credentials."
-
 EXPOSE 47421
 
 CMD ["node", "src/server.bundle.mjs"]
