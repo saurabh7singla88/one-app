@@ -629,7 +629,7 @@ async function generateMemberAISummary(memberName, issues, confluencePages, user
       ai_openai_base_url: 'https://api.openai.com', ai_openai_model: 'gpt-4o-mini',
       ai_openai_api_key: '', ai_gemini_model: 'gemini-1.5-flash', ai_gemini_api_key: '',
     };
-    rows.forEach(r => { s[r.key] = (r.key === 'ai_openai_api_key' || r.key === 'ai_gemini_api_key') ? decrypt(r.value) : r.value; });
+    rows.forEach(r => { s[r.key] = (r.key === 'ai_openai_api_key' || r.key === 'ai_gemini_api_key' || r.key === 'ai_bedrock_api_key') ? decrypt(r.value) : r.value; });
     const provider = s.ai_provider;
     if (provider === 'disabled') return null;
 
@@ -728,7 +728,35 @@ Analyze the above and return the JSON summary.`;
           else aiError = `Gemini error: ${msg}`;
         }
       } else if (provider === 'bedrock') {
-        aiError = 'AWS Bedrock is not supported in member insights yet';
+        if (!s.ai_bedrock_api_key) {
+          aiError = 'AWS Bedrock API key not configured. Add it in Admin → AI Settings.';
+        } else {
+          const region  = s.ai_bedrock_region || 'us-east-1';
+          const modelId = s.ai_bedrock_model  || 'anthropic.claude-3-5-sonnet-20241022-v2:0';
+          const url = `https://bedrock-runtime.${region}.amazonaws.com/model/${encodeURIComponent(modelId)}/converse`;
+          const r = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${s.ai_bedrock_api_key}` },
+            signal: controller.signal,
+            body: JSON.stringify({
+              system: [{ text: systemPrompt }],
+              messages: [{ role: 'user', content: [{ text: userPrompt }] }],
+              inferenceConfig: { maxTokens: 1024, temperature: 0.2 },
+            }),
+          });
+          if (r.ok) {
+            const d = await r.json();
+            text = d.output?.message?.content?.[0]?.text?.trim() || null;
+            if (!text) aiError = 'Bedrock returned an empty response';
+          } else {
+            let detail = `HTTP ${r.status}`;
+            try { const e = await r.json(); detail = e?.message || e?.error?.message || detail; } catch {}
+            if (r.status === 401 || r.status === 403) detail = `API key invalid or lacks bedrock:InvokeModel permission (${r.status})`;
+            else if (r.status === 404) detail = `Model "${modelId}" not found in region ${region}`;
+            else if (r.status === 429) detail = 'Rate limit exceeded — try again shortly';
+            aiError = `Bedrock error: ${detail}`;
+          }
+        }
       }
     } catch (fetchErr) {
       if (fetchErr.name === 'AbortError') aiError = 'AI request timed out (60s). The model may be slow or unavailable.';

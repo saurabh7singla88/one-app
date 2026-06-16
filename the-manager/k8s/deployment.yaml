@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: the-manager
-  namespace: the-manager
+  namespace: one-app
   labels:
     app: the-manager
 spec:

@@ -39,6 +39,7 @@ function FeaturesSection() {
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(null); // key being saved
   const [flags, setFlags]       = useState({ feature_team_board: false, feature_ai_newsletter: false, feature_meeting_notes: true });
+  const [hiddenFeaturesEnabled, setHiddenFeaturesEnabled] = useState(false);
   // Dependency config status
   const [jiraOk, setJiraOk]     = useState(null);
   const [aiOk,   setAiOk]       = useState(null);
@@ -50,6 +51,7 @@ function FeaturesSection() {
       api.get('/ai/settings').catch(() => ({ data: {} })),
     ]).then(([featRes, jiraRes, aiRes]) => {
       setFlags(featRes.data);
+      setHiddenFeaturesEnabled(!!featRes.data.hidden_features_enabled);
       setJiraOk(!!(jiraRes.data.apiTokenSet && jiraRes.data.baseUrl));
       const ai = aiRes.data;
       setAiOk(!!(ai.openaiApiKeySet || ai.geminiApiKeySet || ai.provider === 'ollama'));
@@ -181,24 +183,28 @@ function FeaturesSection() {
         <Divider sx={{ flex: 1 }} />
       </Box>
 
-      <FeatureRow
-        flagKey="feature_ai_newsletter"
-        label="AI Newsletter"
-        description="Weekly digest of your initiatives, meeting notes, and tasks summarised by AI. Requires an AI provider to be configured."
-        icon={<FeedOutlined />}
-        enabled={flags.feature_ai_newsletter}
-        available={!!aiOk}
-        unavailableMsg="AI provider not configured — go to the AI Model section below to set one up."
-      />
-      <FeatureRow
-        flagKey="feature_team_board"
-        label="Team Board"
-        description="JIRA-powered team allocation view showing sprint tickets, assignees, story points and past contributors."
-        icon={<Groups />}
-        enabled={flags.feature_team_board}
-        available={!!jiraOk}
-        unavailableMsg="JIRA integration not configured — go to the JIRA section below to add your credentials."
-      />
+      {hiddenFeaturesEnabled && (
+        <>
+          <FeatureRow
+            flagKey="feature_ai_newsletter"
+            label="AI Newsletter"
+            description="Weekly digest of your initiatives, meeting notes, and tasks summarised by AI. Requires an AI provider to be configured."
+            icon={<FeedOutlined />}
+            enabled={flags.feature_ai_newsletter}
+            available={!!aiOk}
+            unavailableMsg="AI provider not configured — go to the AI Model section below to set one up."
+          />
+          <FeatureRow
+            flagKey="feature_team_board"
+            label="Team Board"
+            description="JIRA-powered team allocation view showing sprint tickets, assignees, story points and past contributors."
+            icon={<Groups />}
+            enabled={flags.feature_team_board}
+            available={!!jiraOk}
+            unavailableMsg="JIRA integration not configured — go to the JIRA section below to add your credentials."
+          />
+        </>
+      )}
     </Box>
   );
 }
@@ -797,29 +803,50 @@ function GmailSection() {
           </Alert>
 
           <Paper variant="outlined" sx={{ p:2, mb:2, background:stepsBg, borderRadius:2 }}>
-            <Typography variant="subtitle2" sx={{ mb:1, fontWeight:600 }}>Setup steps</Typography>
-            <Typography variant="body2" component="ol" sx={{ pl:2, m:0 }}>
-              <li>Open <Link href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console <Launch sx={{fontSize:11}}/></Link> and create or select a project</li>
-              <li>Enable the <strong>Gmail API</strong> for your project</li>
-              <li>Go to <em>APIs &amp; Services → Credentials → Create Credentials → OAuth client ID</em> — choose <strong>Web application</strong></li>
+            <Typography variant="subtitle2" sx={{ mb:1, fontWeight:600 }}>How to set up Gmail OAuth2</Typography>
+            <Typography variant="body2" component="ol" sx={{ pl:2, m:0, '& li': { mb: 1 } }}>
               <li>
-                Add the following as <strong>Authorised redirect URIs</strong>:
-                {[
-                  'http://localhost:3000/api/gmail/oauth/callback',
-                  'http://localhost:3000',
-                ].filter((v, i, a) => a.indexOf(v) === i).map(uri => (
-                  <Box key={uri} component="code" sx={{
-                    display:'block', mt:0.5, p:0.75, borderRadius:1,
-                    background: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
-                    fontFamily:'monospace', fontSize:'0.8rem', wordBreak:'break-all',
-                  }}>
-                    {uri}
-                  </Box>
-                ))}
+                Open <Link href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console <Launch sx={{fontSize:11}}/></Link> and create a new project (or select an existing one).
               </li>
-              <li>Go to <em>APIs &amp; Services → OAuth consent screen → Test users</em> and add your Google account email address</li>
-              <li>Copy the <strong>Client ID</strong> and <strong>Client Secret</strong> below and click <em>Save Credentials</em></li>
-              <li>Click <em>Connect with Google</em> to authorise access</li>
+              <li>
+                Go to <strong>APIs &amp; Services → Library</strong>, search for <strong>Gmail API</strong>, and click <strong>Enable</strong>.
+              </li>
+              <li>
+                Go to <strong>APIs &amp; Services → OAuth consent screen</strong>:
+                <ul style={{ marginTop: 4, paddingLeft: 16 }}>
+                  <li>Choose <strong>External</strong> as the user type and click <strong>Create</strong>.</li>
+                  <li>Fill in the <em>App name</em> (e.g. "One-App") and your email for support and developer contacts. Click <strong>Save and Continue</strong>.</li>
+                  <li>On the <em>Scopes</em> step click <strong>Save and Continue</strong> (no scopes to add manually).</li>
+                  <li>On the <em>Test users</em> step click <strong>Add Users</strong> and add your Google account email. Click <strong>Save and Continue</strong>.</li>
+                </ul>
+              </li>
+              <li>
+                Go to <strong>APIs &amp; Services → Credentials → Create Credentials → OAuth client ID</strong>.
+                Set the <em>Application type</em> to <strong>Web application</strong>.
+              </li>
+              <li>
+                Under <strong>Authorised redirect URIs</strong>, click <strong>Add URI</strong> and paste exactly:
+                <Box component="code" sx={{
+                  display:'block', mt:0.75, p:0.75, borderRadius:1,
+                  background: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
+                  fontFamily:'monospace', fontSize:'0.8rem', wordBreak:'break-all',
+                  userSelect: 'all',
+                }}>
+                  {OAUTH_REDIRECT_URI}
+                </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ display:'block', mt:0.5 }}>
+                  This value is derived from your <code>PUBLIC_URL</code> setting. If you access the app on a different host or port, update <code>PUBLIC_URL</code> in your <code>.env</code> and restart before authorising.
+                </Typography>
+              </li>
+              <li>
+                Click <strong>Create</strong>. In the dialog that appears, copy both the <strong>Client ID</strong> and the <strong>Client Secret</strong>.
+              </li>
+              <li>
+                Paste them into the fields below and click <strong>Save Credentials</strong>.
+              </li>
+              <li>
+                Click <strong>Connect with Google</strong>. You will be redirected to Google's consent screen — sign in with the test-user account you added in step 3, then approve access.
+              </li>
             </Typography>
           </Paper>
 

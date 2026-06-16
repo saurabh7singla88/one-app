@@ -6,11 +6,14 @@ AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:?set AWS_ACCOUNT_ID}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 ECR_REPO="${ECR_REPO:-the-manager}"
 IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD 2>/dev/null || echo latest)}"
-NAMESPACE="the-manager"
+NAMESPACE="one-app"
+
+EKS_CLUSTER_NAME="${EKS_CLUSTER_NAME:?set EKS_CLUSTER_NAME}"
+ACM_CERT_ARN="${ACM_CERT_ARN:?set ACM_CERT_ARN}"
+APP_DOMAIN="${APP_DOMAIN:?set APP_DOMAIN}"
 
 # Build-time args forwarded to the Docker multi-stage build
 VITE_API_URL="${VITE_API_URL:-/api}"
-VITE_ENABLE_MEMBER_INSIGHTS="${VITE_ENABLE_MEMBER_INSIGHTS:-false}"
 VITE_APP_AUTHOR="${VITE_APP_AUTHOR:-Nebrix}"
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -33,9 +36,11 @@ docker buildx use multiplatform-builder
 echo "▸ Build + push → ${IMAGE_URI} (linux/amd64 + linux/arm64)"
 docker buildx build --platform linux/amd64,linux/arm64 \
   --build-arg VITE_API_URL="$VITE_API_URL" \
-  --build-arg VITE_ENABLE_MEMBER_INSIGHTS="$VITE_ENABLE_MEMBER_INSIGHTS" \
   --build-arg VITE_APP_AUTHOR="$VITE_APP_AUTHOR" \
   -t "$IMAGE_URI" --push "$SCRIPT_DIR"
+
+echo "▸ EKS kubeconfig"
+aws eks update-kubeconfig --region "$AWS_REGION" --name "$EKS_CLUSTER_NAME"
 
 echo "▸ Namespace"
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
@@ -52,7 +57,10 @@ kubectl create secret generic the-manager-secrets \
 
 echo "▸ Apply manifests"
 for f in deployment service ingress; do
-  sed "s|IMAGE_URI|${IMAGE_URI}|g" "$SCRIPT_DIR/k8s/${f}.yaml" | kubectl apply -f -
+  sed -e "s|IMAGE_URI|${IMAGE_URI}|g" \
+      -e "s|ACM_CERT_ARN|${ACM_CERT_ARN}|g" \
+      -e "s|themanager\.example\.com|${APP_DOMAIN}|g" \
+      "$SCRIPT_DIR/k8s/${f}.yaml" | kubectl apply -f -
 done
 
 echo "▸ Rollout status"

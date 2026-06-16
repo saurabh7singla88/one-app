@@ -89,6 +89,18 @@ Then rebuild: `npm run docker:build`. Without this key the password is stored in
 
 ---
 
+## Optional: enable hidden features (AI Newsletter & Team Board)
+
+AI Newsletter and Team Board are hidden by default. To unlock them, add this to your `.env`:
+
+```env
+ENABLE_HIDDEN_FEATURES=true
+```
+
+Then restart the container (`npm run docker:restart`). The feature toggles will appear in **Setup → Features**, and the sidebar items will become available once each feature is enabled there.
+
+---
+
 ## Useful commands
 
 | Command | What it does |

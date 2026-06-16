@@ -25,8 +25,7 @@ const ROLE_CONFIG = {
 };
 const ROLE_ORDER = ['DEV', 'QA', 'PM', 'OTHER'];
 
-// ─── Feature flags ───────────────────────────────────────────────────────────
-const INSIGHTS_ENABLED = import.meta.env.VITE_ENABLE_MEMBER_INSIGHTS === 'true';
+
 
 // ─── Priority color mapping ──────────────────────────────────────────────────
 const PRIORITY_CONFIG = {
@@ -620,6 +619,13 @@ export default function TeamBoard() {
   const [sprintsLoading, setSprintsLoading] = useState(false);
   const [sprintsError, setSprintsError] = useState('');
   const [view, setView] = useState(() => localStorage.getItem('teamboard_view') || 'cards');
+  const [insightsEnabled, setInsightsEnabled] = useState(false);
+
+  useEffect(() => {
+    api.get('/features')
+      .then(r => setInsightsEnabled(!!r.data.hidden_features_enabled))
+      .catch(() => {});
+  }, []);
 
   // ── Team member roles (persisted in DB) ───────────────────────────────────
   const [memberRoles, setMemberRoles] = useState({}); // { [jiraName]: 'DEV'|'QA'|'PM'|'OTHER' }
@@ -1107,7 +1113,7 @@ export default function TeamBoard() {
 
       {/* Allocation Table */}
       {data && !loading && view === 'table' && (
-        <AllocationTable team={filteredTeam} memberRoles={memberRoles} onRoleChange={handleRoleChange} onSummaryClick={INSIGHTS_ENABLED ? handleSummaryClick : undefined} />
+        <AllocationTable team={filteredTeam} memberRoles={memberRoles} onRoleChange={handleRoleChange} onSummaryClick={insightsEnabled ? handleSummaryClick : undefined} />
       )}
 
       {/* Team Member Cards — grouped by role */}
@@ -1120,7 +1126,7 @@ export default function TeamBoard() {
               members={memberGroups[roleKey] || []}
               memberRoles={memberRoles}
               onRoleChange={handleRoleChange}
-              onSummaryClick={INSIGHTS_ENABLED ? handleSummaryClick : undefined}
+              onSummaryClick={insightsEnabled ? handleSummaryClick : undefined}
             />
           ))}
         </Box>
@@ -1134,7 +1140,7 @@ export default function TeamBoard() {
       )}
 
       {/* Member Summary Drawer */}
-      {INSIGHTS_ENABLED && (
+      {insightsEnabled && (
         <MemberSummaryDrawer
           open={!!summaryTarget}
           memberName={summaryTarget?.name}

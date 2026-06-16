@@ -7,8 +7,6 @@ services:
       args: 
         # The frontend will call /api/* — nginx (or express static) proxies these
         VITE_API_URL: /api
-        # Enable the member insights panel — set in .env (default: false)
-        VITE_ENABLE_MEMBER_INSIGHTS: ${VITE_ENABLE_MEMBER_INSIGHTS:-false}
         # Author name shown in the UI footer — set in .env (default: Nebrix)
         VITE_APP_AUTHOR: ${VITE_APP_AUTHOR:-Nebrix}
 
@@ -38,6 +36,9 @@ services:
       # Admin panel credentials
       ADMIN_USERNAME: ${ADMIN_USERNAME}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      # Set to true to enable AI Newsletter and Team Board features.
+      # These features are hidden by default. Pass ENABLE_HIDDEN_FEATURES=true in .env to unlock them.
+      ENABLE_HIDDEN_FEATURES: ${ENABLE_HIDDEN_FEATURES:-false}
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"

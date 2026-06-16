@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: the-manager
-  namespace: the-manager
+  namespace: one-app
 spec:
   selector:
     app: the-manager
