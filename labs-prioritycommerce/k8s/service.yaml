@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: labs-prioritycommerce
+  namespace: labs
+spec:
+  selector:
+    app: labs-prioritycommerce
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+  type: ClusterIP

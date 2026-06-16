@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: labs-prioritycommerce
+  namespace: labs
+  labels:
+    app: labs-prioritycommerce
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: labs-prioritycommerce
+  template:
+    metadata:
+      labels:
+        app: labs-prioritycommerce
+    spec:
+      containers:
+        - name: labs-prioritycommerce
+          image: IMAGE_URI  # replaced by deploy.sh
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 5
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: labs-prioritycommerce
