@@ -1,13 +1,11 @@
 import express from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
-import { decrypt } from '../middleware/cipher.js';
 import logger from '../lib/logger.js';
+import { loadAISettings, callLLM } from '../lib/llm.js';
 
 const router = express.Router();
 router.use(authenticate);
-
-const LLM_TIMEOUT = 30_000;
 
 const PRIORITY_SCORE = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
 
@@ -49,130 +47,6 @@ function buildRecommendation(sortedTasks, mode) {
     entries.push({ slot: slots[idx], initiativeId: task.id, customTitle: null, position: 0 });
   });
   return entries;
-}
-
-const ENCRYPTED_SETTING_KEYS = new Set([
-  'ai_openai_api_key', 'ai_gemini_api_key',
-  'ai_bedrock_access_key_id', 'ai_bedrock_secret_key',
-]);
-
-async function loadAISettings(userId) {
-  const defaults = {
-    ai_provider: process.env.AI_PROVIDER || 'ollama',
-    ai_ollama_base_url: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
-    ai_ollama_model: process.env.OLLAMA_MODEL || 'llama3.1:latest',
-    ai_openai_base_url: 'https://api.openai.com',
-    ai_openai_model: 'gpt-4o-mini',
-    ai_openai_api_key: '',
-    ai_gemini_model: 'gemini-1.5-flash',
-    ai_gemini_api_key: '',
-    ai_bedrock_region: 'us-east-1',
-    ai_bedrock_model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    ai_bedrock_access_key_id: '',
-    ai_bedrock_secret_key: '',
-  };
-  // Layer 2: app-level defaults set by admin
-  const appRows = await prisma.appSetting.findMany({ where: { key: { startsWith: 'ai_' } } });
-  for (const row of appRows) {
-    defaults[row.key] = ENCRYPTED_SETTING_KEYS.has(row.key) ? decrypt(row.value) : row.value;
-  }
-  // Layer 3: per-user overrides (always win)
-  const rows = await prisma.userSetting.findMany({ where: { userId, key: { startsWith: 'ai_' } } });
-  for (const row of rows) {
-    defaults[row.key] = ENCRYPTED_SETTING_KEYS.has(row.key) ? decrypt(row.value) : row.value;
-  }
-  return defaults;
-}
-
-async function callLLM(settings, systemPrompt, userPrompt) {
-  const provider = settings.ai_provider;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT);
-
-  try {
-    if (provider === 'ollama') {
-      const res = await fetch(`${settings.ai_ollama_base_url}/api/chat`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({
-          model: settings.ai_ollama_model, stream: false, format: 'json',
-          options: { temperature: 0.3, num_predict: 2048 },
-          messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-        }),
-      });
-      if (!res.ok) return { text: null, error: `Ollama HTTP ${res.status}` };
-      const data = await res.json();
-      const text = (data.message?.content || data.response || '').trim();
-      if (text) logger.info('AI call succeeded', { provider: 'ollama', model: settings.ai_ollama_model });
-      return { text, error: null };
-    }
-
-    if (provider === 'openai') {
-      if (!settings.ai_openai_api_key) return { text: null, error: 'OpenAI API key not configured.' };
-      const base = (settings.ai_openai_base_url || 'https://api.openai.com').replace(/\/$/, '');
-      const res = await fetch(`${base}/v1/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.ai_openai_api_key}` },
-        signal: controller.signal,
-        body: JSON.stringify({
-          model: settings.ai_openai_model, temperature: 0.3,
-          response_format: { type: 'json_object' },
-          messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-        }),
-      });
-      if (!res.ok) return { text: null, error: `OpenAI HTTP ${res.status}` };
-      const data = await res.json();
-      const text = data.choices?.[0]?.message?.content?.trim() || null;
-      if (text) logger.info('AI call succeeded', { provider: 'openai', model: settings.ai_openai_model });
-      return { text, error: text ? null : 'OpenAI returned empty response.' };
-    }
-
-    if (provider === 'gemini') {
-      if (!settings.ai_gemini_api_key) return { text: null, error: 'Gemini API key not configured.' };
-      const model = settings.ai_gemini_model || 'gemini-1.5-flash';
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${settings.ai_gemini_api_key}`;
-      const res = await fetch(url, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.3, maxOutputTokens: 2048 },
-        }),
-      });
-      if (!res.ok) return { text: null, error: `Gemini HTTP ${res.status}` };
-      const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
-      if (text) logger.info('AI call succeeded', { provider: 'gemini', model: settings.ai_gemini_model || 'gemini-1.5-flash' });
-      return { text, error: text ? null : 'Gemini returned empty response.' };
-    }
-    if (provider === 'bedrock') {
-      if (!settings.ai_bedrock_access_key_id || !settings.ai_bedrock_secret_key)
-        return { text: null, error: 'AWS Bedrock credentials not configured.' };
-      const { BedrockRuntimeClient, ConverseCommand } = await import('@aws-sdk/client-bedrock-runtime');
-      const client = new BedrockRuntimeClient({
-        region: settings.ai_bedrock_region || 'us-east-1',
-        credentials: {
-          accessKeyId: settings.ai_bedrock_access_key_id,
-          secretAccessKey: settings.ai_bedrock_secret_key,
-        },
-      });
-      const cmd = new ConverseCommand({
-        modelId: settings.ai_bedrock_model || 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-        system: [{ text: systemPrompt }],
-        messages: [{ role: 'user', content: [{ text: userPrompt }] }],
-        inferenceConfig: { maxTokens: 2048, temperature: 0.3 },
-      });
-      const resp = await client.send(cmd);
-      const text = resp.output?.message?.content?.[0]?.text?.trim() ?? null;
-      if (text) logger.info('AI call succeeded', { provider: 'bedrock', model: settings.ai_bedrock_model || 'anthropic.claude-3-5-sonnet-20241022-v2:0' });
-      return { text, error: text ? null : 'Bedrock returned empty response.' };
-    }
-    return { text: null, error: `Unknown AI provider: ${provider}` };
-  } catch (e) {
-    logger.error('LLM call failed in planner', e);
-    return { text: null, error: e.name === 'AbortError' ? 'AI request timed out.' : e.message };
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 // ─── GET /planner?date=YYYY-MM-DD  ───────────────────────────────────────────

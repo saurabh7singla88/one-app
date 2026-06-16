@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
 import { encrypt, decrypt } from '../middleware/cipher.js';
 import logger from '../lib/logger.js';
+import { loadAISettings, callLLM, getActiveModel } from '../lib/llm.js';
 
 function safeEncrypt(value) {
   return (process.env.TOKEN_ENCRYPTION_KEY?.length === 64) ? encrypt(value) : value;
@@ -621,16 +622,8 @@ router.get('/team', async (req, res, next) => {
 // ─── AI helper for member summary ─────────────────────────────────────────────
 async function generateMemberAISummary(memberName, issues, confluencePages, userId) {
   try {
-    const rows = await prisma.userSetting.findMany({ where: { userId, key: { startsWith: 'ai_' } } });
-    const s = {
-      ai_provider: process.env.AI_PROVIDER || 'ollama',
-      ai_ollama_base_url: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
-      ai_ollama_model: process.env.OLLAMA_MODEL || 'llama3.1:latest',
-      ai_openai_base_url: 'https://api.openai.com', ai_openai_model: 'gpt-4o-mini',
-      ai_openai_api_key: '', ai_gemini_model: 'gemini-1.5-flash', ai_gemini_api_key: '',
-    };
-    rows.forEach(r => { s[r.key] = (r.key === 'ai_openai_api_key' || r.key === 'ai_gemini_api_key' || r.key === 'ai_bedrock_api_key') ? decrypt(r.value) : r.value; });
-    const provider = s.ai_provider;
+    const settings = await loadAISettings(userId);
+    const provider = settings.ai_provider;
     if (provider === 'disabled') return null;
 
     const issueLines = issues.slice(0, 40).map(i =>
@@ -661,114 +654,9 @@ ${confLines || '(none)'}
 
 Analyze the above and return the JSON summary.`;
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 60_000);
-    let text = null;
-    let aiError = null;
-    let usedModel = null;
-    try {
-      if (provider === 'ollama') {
-        const r = await fetch(`${s.ai_ollama_base_url}/api/chat`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-          body: JSON.stringify({
-            model: s.ai_ollama_model, stream: false, format: 'json',
-            options: { temperature: 0.2, num_predict: 1024 },
-            messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-          }),
-        });
-        usedModel = s.ai_ollama_model;
-        if (r.ok) { const d = await r.json(); text = d.message?.content || d.response; }
-        else { aiError = `Ollama error: HTTP ${r.status}. Make sure Ollama is running and the model is available.`; }
-      } else if (provider === 'openai') {
-        const base = (s.ai_openai_base_url || 'https://api.openai.com').replace(/\/$/, '');
-        const r = await fetch(`${base}/v1/chat/completions`, {
-          method: 'POST', signal: controller.signal,
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${s.ai_openai_api_key}` },
-          body: JSON.stringify({
-            model: s.ai_openai_model, temperature: 0.2,
-            response_format: { type: 'json_object' },
-            messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-          }),
-        });
-        usedModel = s.ai_openai_model;
-        if (r.ok) { const d = await r.json(); text = d.choices?.[0]?.message?.content; }
-        else {
-          const d = await r.json().catch(() => ({}));
-          aiError = d?.error?.message || `OpenAI error: HTTP ${r.status}`;
-        }
-      } else if (provider === 'gemini') {
-        const model = s.ai_gemini_model || 'gemini-1.5-flash';
-        usedModel = model;
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${s.ai_gemini_api_key}`;
-        // gemini-2.5-pro-preview models don't always honour responseMimeType — try with it first, fall back without
-        const makeGeminiBody = (useJsonMime) => JSON.stringify({
-          system_instruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          generationConfig: {
-            ...(useJsonMime ? { responseMimeType: 'application/json' } : {}),
-            temperature: 0.2, maxOutputTokens: 1024,
-          },
-        });
-        let r = await fetch(url, { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: makeGeminiBody(true) });
-        // Some preview models reject responseMimeType — retry without it
-        if (!r.ok && r.status === 400) {
-          r = await fetch(url, { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: makeGeminiBody(false) });
-        }
-        if (r.ok) {
-          const d = await r.json();
-          text = d.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (!text) {
-            const reason = d.candidates?.[0]?.finishReason;
-            const safety = d.promptFeedback?.blockReason;
-            aiError = safety ? `Gemini blocked the request: ${safety}` : reason ? `Gemini stopped early: ${reason}` : 'Gemini returned an empty response';
-          }
-        } else {
-          const d = await r.json().catch(() => ({}));
-          const msg = d?.error?.message || `HTTP ${r.status}`;
-          if (r.status === 400) aiError = `Gemini: ${msg} — the model "${model}" may not support JSON mode or the request was invalid`;
-          else if (r.status === 403) aiError = `Gemini: API key invalid or does not have access to model "${model}"`;
-          else if (r.status === 429) aiError = `Gemini: Rate limit or quota exceeded. Try again shortly or switch to a different model`;
-          else if (r.status === 404) aiError = `Gemini: Model "${model}" not found. Check the model name in AI Settings`;
-          else aiError = `Gemini error: ${msg}`;
-        }
-      } else if (provider === 'bedrock') {
-        if (!s.ai_bedrock_api_key) {
-          aiError = 'AWS Bedrock API key not configured. Add it in Admin → AI Settings.';
-        } else {
-          const region  = s.ai_bedrock_region || 'us-east-1';
-          const modelId = s.ai_bedrock_model  || 'anthropic.claude-3-5-sonnet-20241022-v2:0';
-          usedModel = modelId;
-          const url = `https://bedrock-runtime.${region}.amazonaws.com/model/${encodeURIComponent(modelId)}/converse`;
-          const r = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${s.ai_bedrock_api_key}` },
-            signal: controller.signal,
-            body: JSON.stringify({
-              system: [{ text: systemPrompt }],
-              messages: [{ role: 'user', content: [{ text: userPrompt }] }],
-              inferenceConfig: { maxTokens: 1024, temperature: 0.2 },
-            }),
-          });
-          if (r.ok) {
-            const d = await r.json();
-            text = d.output?.message?.content?.[0]?.text?.trim() || null;
-            if (!text) aiError = 'Bedrock returned an empty response';
-          } else {
-            let detail = `HTTP ${r.status}`;
-            try { const e = await r.json(); detail = e?.message || e?.error?.message || detail; } catch {}
-            if (r.status === 401 || r.status === 403) detail = `API key invalid or lacks bedrock:InvokeModel permission (${r.status})`;
-            else if (r.status === 404) detail = `Model "${modelId}" not found in region ${region}`;
-            else if (r.status === 429) detail = 'Rate limit exceeded — try again shortly';
-            aiError = `Bedrock error: ${detail}`;
-          }
-        }
-      }
-    } catch (fetchErr) {
-      if (fetchErr.name === 'AbortError') aiError = 'AI request timed out (60s). The model may be slow or unavailable.';
-      else aiError = fetchErr.message || 'AI request failed';
-    } finally { clearTimeout(timer); }
+    const { text, error: aiError } = await callLLM(settings, systemPrompt, userPrompt);
 
-    if (text) logger.info('Member Insights AI call succeeded', { provider, model: usedModel, member: memberName });
+    if (text) logger.info('Member Insights AI call succeeded', { provider, model: getActiveModel(settings), member: memberName });
     if (!text) return { data: null, error: aiError || 'AI returned an empty response' };
     try { return { data: JSON.parse(text), error: null }; } catch { return { data: null, error: 'AI returned invalid JSON — try a different model' }; }
   } catch (err) {

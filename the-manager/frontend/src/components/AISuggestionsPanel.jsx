@@ -16,6 +16,7 @@ const PROVIDER_BADGE = {
   ollama:  { label: '🦙 Ollama',  color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0', darkColor: '#4ade80', darkBg: 'rgba(21,128,61,0.15)',  darkBorder: 'rgba(21,128,61,0.3)'  },
   openai:  { label: '✨ OpenAI',   color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe', darkColor: '#60a5fa', darkBg: 'rgba(59,130,246,0.15)', darkBorder: 'rgba(59,130,246,0.3)' },
   gemini:  { label: '♊ Gemini',   color: '#b45309', bg: '#fffbeb', border: '#fde68a', darkColor: '#fbbf24', darkBg: 'rgba(251,191,36,0.15)', darkBorder: 'rgba(251,191,36,0.3)' },
+  bedrock: { label: '☁️ Bedrock',  color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', darkColor: '#a78bfa', darkBg: 'rgba(124,58,237,0.15)', darkBorder: 'rgba(124,58,237,0.3)' },
 };
 
 const STATUS_CONFIG = {
