@@ -13,7 +13,7 @@ router.get('/', async (req, res, next) => {
   try {
     const { status, priority, parentId, search, canvasId, isStandaloneTask, type, lean } = req.query;
 
-    const where = {};
+    const where = { createdById: req.user.id };
 
     if (status) where.status = status;
     if (priority) where.priority = priority;
@@ -28,7 +28,7 @@ router.get('/', async (req, res, next) => {
     } else if (canvasId && !parentId) {
       // Fetch canvas root items first, then collect all descendant IDs
       const rootItems = await prisma.initiative.findMany({
-        where: { canvasId },
+        where: { canvasId, createdById: req.user.id },
         select: { id: true },
       });
       if (rootItems.length === 0) {
@@ -40,7 +40,7 @@ router.get('/', async (req, res, next) => {
       while (queue.length) {
         const batch = queue.splice(0, queue.length);
         const children = await prisma.initiative.findMany({
-          where: { parentId: { in: batch } },
+          where: { parentId: { in: batch }, createdById: req.user.id },
           select: { id: true },
         });
         children.forEach(c => {
@@ -106,6 +106,20 @@ router.patch('/reorder', async (req, res, next) => {
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'items array required' });
     }
+    
+    // Verify ownership of all items before updating
+    const itemIds = items.map(i => i.id);
+    const existingItems = await prisma.initiative.findMany({
+      where: { id: { in: itemIds } },
+      select: { id: true, createdById: true }
+    });
+    
+    for (const item of existingItems) {
+      if (item.createdById !== req.user.id) {
+        return res.status(403).json({ error: 'Cannot reorder items you do not own' });
+      }
+    }
+    
     await Promise.all(
       items.map(({ id, sortOrder }) =>
         prisma.initiative.update({ where: { id }, data: { sortOrder } })
@@ -190,6 +204,13 @@ router.get('/:id', async (req, res, next) => {
 
     if (!initiative) {
       return res.status(404).json({ error: 'Initiative not found' });
+    }
+
+    // Verify ownership (user must be the creator OR an assignee)
+    const isCreator = initiative.createdById === req.user.id;
+    const isAssignee = initiative.assignees.some(a => a.id === req.user.id);
+    if (!isCreator && !isAssignee) {
+      return res.status(403).json({ error: 'Forbidden' });
     }
 
     res.json(initiative);
@@ -313,6 +334,11 @@ router.put('/:id', async (req, res, next) => {
     if (!existing) {
       return res.status(404).json({ error: 'Initiative not found' });
     }
+    
+    // Verify ownership
+    if (existing.createdById !== req.user.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
 
     const data = {};
     if (title !== undefined) data.title = title;
@@ -409,6 +435,11 @@ router.delete('/:id', async (req, res, next) => {
     if (!initiative) {
       return res.status(404).json({ error: 'Initiative not found' });
     }
+    
+    // Verify ownership
+    if (initiative.createdById !== req.user.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
 
     // Delete will cascade to children
     await prisma.initiative.delete({
@@ -428,6 +459,11 @@ router.patch('/:id/status',
     try {
       const { id } = req.params;
       const { status } = req.body;
+      
+      // Verify ownership first
+      const initiative = await prisma.initiative.findUnique({ where: { id } });
+      if (!initiative) return res.status(404).json({ error: 'Initiative not found' });
+      if (initiative.createdById !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
 
       const data = { status };
       if (status === 'COMPLETED') {
@@ -435,7 +471,7 @@ router.patch('/:id/status',
         data.progress = 100;
       }
 
-      const initiative = await prisma.initiative.update({
+      const updated = await prisma.initiative.update({
         where: { id },
         data,
         include: {
@@ -458,7 +494,7 @@ router.patch('/:id/status',
         }
       });
 
-      res.json(initiative);
+      res.json(updated);
     } catch (error) {
       next(error);
     }
@@ -472,8 +508,13 @@ router.patch('/:id/priority',
     try {
       const { id } = req.params;
       const { priority } = req.body;
+      
+      // Verify ownership first
+      const initiative = await prisma.initiative.findUnique({ where: { id } });
+      if (!initiative) return res.status(404).json({ error: 'Initiative not found' });
+      if (initiative.createdById !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
 
-      const initiative = await prisma.initiative.update({
+      const updated = await prisma.initiative.update({
         where: { id },
         data: { priority },
         include: {
@@ -496,7 +537,7 @@ router.patch('/:id/priority',
         }
       });
 
-      res.json(initiative);
+      res.json(updated);
     } catch (error) {
       next(error);
     }
@@ -508,13 +549,18 @@ router.patch('/:id/position', async (req, res, next) => {
   try {
     const { id } = req.params;
     const { positionX, positionY } = req.body;
+    
+    // Verify ownership first
+    const initiative = await prisma.initiative.findUnique({ where: { id } });
+    if (!initiative) return res.status(404).json({ error: 'Initiative not found' });
+    if (initiative.createdById !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
 
-    const initiative = await prisma.initiative.update({
+    const updated = await prisma.initiative.update({
       where: { id },
       data: { positionX, positionY }
     });
 
-    res.json(initiative);
+    res.json(updated);
   } catch (error) {
     next(error);
   }
@@ -525,6 +571,14 @@ router.patch('/:id/position', async (req, res, next) => {
 // GET /initiatives/:id/links
 router.get('/:id/links', async (req, res, next) => {
   try {
+    // Verify ownership of the initiative
+    const initiative = await prisma.initiative.findUnique({
+      where: { id: req.params.id },
+      select: { createdById: true }
+    });
+    if (!initiative) return res.status(404).json({ error: 'Initiative not found' });
+    if (initiative.createdById !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
+    
     const links = await prisma.link.findMany({
       where: { initiativeId: req.params.id },
       include: { createdBy: { select: { id: true, name: true, avatar: true } } },
@@ -541,6 +595,14 @@ router.post('/:id/links',
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+      
+      // Verify ownership of the initiative
+      const initiative = await prisma.initiative.findUnique({
+        where: { id: req.params.id },
+        select: { createdById: true }
+      });
+      if (!initiative) return res.status(404).json({ error: 'Initiative not found' });
+      if (initiative.createdById !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
 
       const { url, title, description, category, tags } = req.body;
       const link = await prisma.link.create({
@@ -569,6 +631,12 @@ router.post('/:id/links',
 router.put('/links/:linkId', async (req, res, next) => {
   try {
     const { url, title, description, category, tags } = req.body;
+    
+    // Verify ownership of the link
+    const link = await prisma.link.findUnique({ where: { id: req.params.linkId } });
+    if (!link) return res.status(404).json({ error: 'Link not found' });
+    if (link.createdById !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
+    
     const data = {};
     if (url !== undefined) data.url = url;
     if (title !== undefined) data.title = title;
@@ -576,18 +644,23 @@ router.put('/links/:linkId', async (req, res, next) => {
     if (category !== undefined) data.category = category;
     if (tags !== undefined) data.tags = tags;
 
-    const link = await prisma.link.update({
+    const updated = await prisma.link.update({
       where: { id: req.params.linkId },
       data,
       include: { createdBy: { select: { id: true, name: true, avatar: true } } }
     });
-    res.json(link);
+    res.json(updated);
   } catch (error) { next(error); }
 });
 
 // DELETE /links/:linkId
 router.delete('/links/:linkId', async (req, res, next) => {
   try {
+    // Verify ownership of the link
+    const link = await prisma.link.findUnique({ where: { id: req.params.linkId } });
+    if (!link) return res.status(404).json({ error: 'Link not found' });
+    if (link.createdById !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
+    
     await prisma.link.delete({ where: { id: req.params.linkId } });
     res.json({ message: 'Link deleted' });
   } catch (error) { next(error); }
@@ -598,6 +671,14 @@ router.delete('/links/:linkId', async (req, res, next) => {
 // GET /initiatives/:id/comments
 router.get('/:id/comments', async (req, res, next) => {
   try {
+    // Verify ownership of the initiative
+    const initiative = await prisma.initiative.findUnique({
+      where: { id: req.params.id },
+      select: { createdById: true }
+    });
+    if (!initiative) return res.status(404).json({ error: 'Initiative not found' });
+    if (initiative.createdById !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
+    
     const comments = await prisma.comment.findMany({
       where: { initiativeId: req.params.id },
       include: { user: { select: { id: true, name: true, avatar: true } } },
@@ -614,6 +695,14 @@ router.post('/:id/comments',
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+      
+      // Verify ownership of the initiative
+      const initiative = await prisma.initiative.findUnique({
+        where: { id: req.params.id },
+        select: { createdById: true }
+      });
+      if (!initiative) return res.status(404).json({ error: 'Initiative not found' });
+      if (initiative.createdById !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
 
       const comment = await prisma.comment.create({
         data: { content: req.body.content, initiativeId: req.params.id, userId: req.user.id },
@@ -662,6 +751,14 @@ router.delete('/comments/:commentId', async (req, res, next) => {
 // GET /initiatives/:id/activity
 router.get('/:id/activity', async (req, res, next) => {
   try {
+    // Verify ownership of the initiative
+    const initiative = await prisma.initiative.findUnique({
+      where: { id: req.params.id },
+      select: { createdById: true }
+    });
+    if (!initiative) return res.status(404).json({ error: 'Initiative not found' });
+    if (initiative.createdById !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
+    
     const logs = await prisma.activityLog.findMany({
       where: { initiativeId: req.params.id },
       include: { user: { select: { id: true, name: true, avatar: true } } },
@@ -678,9 +775,17 @@ router.get('/:id/activity', async (req, res, next) => {
 router.get('/:id/children', async (req, res, next) => {
   try {
     const { id } = req.params;
+    
+    // Verify ownership of parent initiative
+    const parent = await prisma.initiative.findUnique({
+      where: { id },
+      select: { createdById: true }
+    });
+    if (!parent) return res.status(404).json({ error: 'Initiative not found' });
+    if (parent.createdById !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
 
     const children = await prisma.initiative.findMany({
-      where: { parentId: id },
+      where: { parentId: id, createdById: req.user.id },
       include: {
         assignees: {
           select: {

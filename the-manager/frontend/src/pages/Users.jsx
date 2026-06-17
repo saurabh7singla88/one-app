@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Button, Avatar, Chip, Divider,
   Dialog, DialogTitle, DialogContent, DialogActions,
@@ -34,6 +35,19 @@ function avatarColor(name) {
 
 export default function Users() {
   const { user: currentUser } = useSelector(s => s.auth);
+  const navigate = useNavigate();
+
+  // Redirect non-admins
+  useEffect(() => {
+    if (currentUser && currentUser.role !== 'ADMIN') {
+      navigate('/', { replace: true });
+    }
+  }, [currentUser, navigate]);
+
+  // If not admin, don't render anything (guard)
+  if (!currentUser || currentUser.role !== 'ADMIN') {
+    return null;
+  }
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);

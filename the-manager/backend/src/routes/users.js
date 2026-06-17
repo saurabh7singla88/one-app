@@ -1,7 +1,7 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
 import { prisma } from '../lib/prisma.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, authorize } from '../middleware/auth.js';
 import { randomUUID } from 'crypto';
 
 const router = express.Router();
@@ -18,7 +18,7 @@ const USER_SELECT = {
 
 router.use(authenticate);
 
-// Get all users
+// Get all users (readable by anyone)
 router.get('/', async (req, res, next) => {
   try {
     const users = await prisma.user.findMany({
@@ -31,8 +31,8 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// Create a user (password optional — if omitted, user cannot log in until one is set)
-router.post('/', async (req, res, next) => {
+// Create a user (admin only; password optional — if omitted, user cannot log in until one is set)
+router.post('/', authorize('ADMIN'), async (req, res, next) => {
   try {
     const { name, email, role = 'VIEWER', password } = req.body;
     if (!name?.trim()) {
@@ -73,6 +73,37 @@ router.post('/', async (req, res, next) => {
   }
 });
 
+// Quick user creation (authenticated users only; for adding team members during workflows)
+// Creates user with random email and no login password
+router.post('/quick', async (req, res, next) => {
+  try {
+    const { name, role = 'VIEWER' } = req.body;
+    if (!name?.trim()) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+
+    // Generate a unique random email for quick users
+    const randomId = randomUUID().substring(0, 8);
+    const email = `user-${randomId}@internal.local`;
+    const hashedPassword = await bcrypt.hash(randomUUID(), 10);
+
+    const user = await prisma.user.create({
+      data: {
+        name: name.trim(),
+        email,
+        password: hashedPassword,
+        role,
+        hasPassword: false, // User cannot log in until password is set by admin
+      },
+      select: USER_SELECT,
+    });
+
+    res.status(201).json(user);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Update current user profile
 router.put('/me', async (req, res, next) => {
   try {
@@ -94,8 +125,8 @@ router.put('/me', async (req, res, next) => {
   }
 });
 
-// Update a user (name, email, role, optionally set/reset password)
-router.put('/:id', async (req, res, next) => {
+// Update a user (admin only; name, email, role, optionally set/reset password)
+router.put('/:id', authorize('ADMIN'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const { name, email, role, password } = req.body;
@@ -130,8 +161,8 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// Delete a user
-router.delete('/:id', async (req, res, next) => {
+// Delete a user (admin only)
+router.delete('/:id', authorize('ADMIN'), async (req, res, next) => {
   try {
     const { id } = req.params;
     if (id === req.user.id) {

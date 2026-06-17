@@ -239,8 +239,13 @@ router.post('/initiatives/:initiativeId', async (req, res, next) => {
 // Returns the children as an array (not persisted — always live from JIRA).
 router.get('/:id/children', async (req, res, next) => {
   try {
-    const item = await prisma.integrationItem.findUnique({ where: { id: req.params.id } });
+    const item = await prisma.integrationItem.findUnique({ 
+      where: { id: req.params.id },
+      include: { initiative: { select: { createdById: true } } }
+    });
     if (!item) return res.status(404).json({ error: 'Integration item not found.' });
+    // Verify ownership of parent initiative
+    if (item.initiative.createdById !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
     if (item.type !== 'JIRA') return res.status(400).json({ error: 'Children are only available for JIRA tickets.' });
 
     const settings = await loadAtlassianSettings();
@@ -355,8 +360,13 @@ router.get('/:id/children', async (req, res, next) => {
 // Fetch child pages from Confluence for a linked Confluence item (not persisted).
 router.get('/:id/confluence-children', async (req, res, next) => {
   try {
-    const item = await prisma.integrationItem.findUnique({ where: { id: req.params.id } });
+    const item = await prisma.integrationItem.findUnique({ 
+      where: { id: req.params.id },
+      include: { initiative: { select: { createdById: true } } }
+    });
     if (!item) return res.status(404).json({ error: 'Integration item not found.' });
+    // Verify ownership of parent initiative
+    if (item.initiative.createdById !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
     if (item.type !== 'CONFLUENCE') return res.status(400).json({ error: 'Child pages are only available for Confluence items.' });
 
     const settings = await loadAtlassianSettings();
@@ -419,8 +429,13 @@ router.get('/:id/confluence-children', async (req, res, next) => {
 // ─── POST /api/integrations/:id/refresh ──────────────────────────────────────
 router.post('/:id/refresh', async (req, res, next) => {
   try {
-    const item = await prisma.integrationItem.findUnique({ where: { id: req.params.id } });
+    const item = await prisma.integrationItem.findUnique({ 
+      where: { id: req.params.id },
+      include: { initiative: { select: { createdById: true } } }
+    });
     if (!item) return res.status(404).json({ error: 'Integration item not found.' });
+    // Verify ownership of parent initiative
+    if (item.initiative.createdById !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
 
     const settings = await loadAtlassianSettings();
     if (!settings['jira_base_url'] || !settings['jira_email'] || !settings['jira_api_token']) {

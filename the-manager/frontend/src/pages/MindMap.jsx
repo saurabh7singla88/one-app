@@ -367,7 +367,7 @@ function MindMapInner() {
     if (!quickUserName.trim()) return;
     setQuickUserSaving(true);
     try {
-      const r = await api.post('/users', { name: quickUserName.trim(), role: quickUserRole });
+      const r = await api.post('/users/quick', { name: quickUserName.trim(), role: quickUserRole });
       setUsers(prev => [...prev, r.data].sort((a, b) => a.name.localeCompare(b.name)));
       onCreated(r.data.id);
       setQuickUserOpen(false);

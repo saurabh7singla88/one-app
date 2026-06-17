@@ -103,6 +103,10 @@ router.put('/', async (req, res, next) => {
 
     let entry;
     if (id) {
+      // Verify ownership before updating
+      const existing = await prisma.plannerEntry.findUnique({ where: { id } });
+      if (!existing || existing.userId !== userId) return res.status(403).json({ error: 'Forbidden' });
+      
       entry = await prisma.plannerEntry.update({
         where: { id },
         data: { date, slot, initiativeId: initiativeId || null, customTitle: customTitle || null, note: note || null, position: position ?? 0, updatedAt: new Date() },
@@ -207,6 +211,7 @@ router.post('/recommend', async (req, res, next) => {
     if (!date) return res.status(400).json({ error: 'date required' });
 
     const where = {
+      createdById: userId,
       status: { notIn: ['COMPLETED', 'CANCELLED'] },
     };
     if (canvasId) where.canvasId = canvasId;
@@ -240,7 +245,7 @@ router.post('/ai-recommend', async (req, res, next) => {
     const userId = req.user.id;
     if (!date) return res.status(400).json({ error: 'date required' });
 
-    const where = { status: { notIn: ['COMPLETED', 'CANCELLED'] } };
+    const where = { createdById: userId, status: { notIn: ['COMPLETED', 'CANCELLED'] } };
     if (canvasId) where.canvasId = canvasId;
 
     const tasks = await prisma.initiative.findMany({
