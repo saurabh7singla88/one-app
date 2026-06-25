@@ -29,6 +29,11 @@ model User {
   updatedAt DateTime @updatedAt
   lastLogin DateTime?
 
+  // User creation tracking
+  createdById String?
+  createdBy   User?   @relation("UserCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers User[] @relation("UserCreator")
+
   // Relations
   initiatives Initiative[] @relation("InitiativeCreator")
   assignedInitiatives Initiative[] @relation("InitiativeAssignees")

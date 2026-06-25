@@ -88,7 +88,7 @@ export default function Layout() {
   ];
 
   const systemItems = [
-    ...(user?.role === 'ADMIN' ? [{ text: 'Users', icon: <PeopleIcon fontSize="small" />,  path: '/users' }] : []),
+    { text: 'Users', icon: <PeopleIcon fontSize="small" />,  path: '/users' },
     { text: 'Setup', icon: <SettingsIcon fontSize="small" />, path: '/setup' },
     { text: 'Help',  icon: <HelpOutline fontSize="small" />,  path: '/help' },
   ];

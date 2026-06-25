@@ -18,10 +18,11 @@ const USER_SELECT = {
 
 router.use(authenticate);
 
-// Get all users (readable by anyone)
+// Get users created by current user
 router.get('/', async (req, res, next) => {
   try {
     const users = await prisma.user.findMany({
+      where: { createdById: req.user.id },
       select: USER_SELECT,
       orderBy: { name: 'asc' },
     });
@@ -31,8 +32,8 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// Create a user (admin only; password optional — if omitted, user cannot log in until one is set)
-router.post('/', authorize('ADMIN'), async (req, res, next) => {
+// Create a user (any authenticated user can create; password optional)
+router.post('/', async (req, res, next) => {
   try {
     const { name, email, role = 'VIEWER', password } = req.body;
     if (!name?.trim()) {
@@ -63,6 +64,7 @@ router.post('/', authorize('ADMIN'), async (req, res, next) => {
         password: hashedPassword,
         role,
         hasPassword: !!(password?.trim()),
+        createdById: req.user.id, // Track who created this user
       },
       select: USER_SELECT,
     });
@@ -73,7 +75,7 @@ router.post('/', authorize('ADMIN'), async (req, res, next) => {
   }
 });
 
-// Quick user creation (authenticated users only; for adding team members during workflows)
+// Quick user creation (any authenticated user can create quick team members)
 // Creates user with random email and no login password
 router.post('/quick', async (req, res, next) => {
   try {
@@ -93,7 +95,8 @@ router.post('/quick', async (req, res, next) => {
         email,
         password: hashedPassword,
         role,
-        hasPassword: false, // User cannot log in until password is set by admin
+        hasPassword: false, // User cannot log in until password is set by owner
+        createdById: req.user.id, // Track who created this quick user
       },
       select: USER_SELECT,
     });
@@ -125,11 +128,20 @@ router.put('/me', async (req, res, next) => {
   }
 });
 
-// Update a user (admin only; name, email, role, optionally set/reset password)
-router.put('/:id', authorize('ADMIN'), async (req, res, next) => {
+// Update a user (owner can update users they created)
+router.put('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
     const { name, email, role, password } = req.body;
+
+    // Check if current user owns this user (created it)
+    const existingUser = await prisma.user.findUnique({ where: { id } });
+    if (!existingUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    if (existingUser.createdById !== req.user.id) {
+      return res.status(403).json({ error: 'You can only manage users you created' });
+    }
 
     const data = {};
     if (name?.trim()) data.name = name.trim();
@@ -161,13 +173,23 @@ router.put('/:id', authorize('ADMIN'), async (req, res, next) => {
   }
 });
 
-// Delete a user (admin only)
-router.delete('/:id', authorize('ADMIN'), async (req, res, next) => {
+// Delete a user (owner can delete users they created)
+router.delete('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
     if (id === req.user.id) {
       return res.status(400).json({ error: 'You cannot delete your own account' });
     }
+
+    // Check if current user owns this user (created it)
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    if (user.createdById !== req.user.id) {
+      return res.status(403).json({ error: 'You can only delete users you created' });
+    }
+
     await prisma.user.delete({ where: { id } });
     res.json({ success: true });
   } catch (error) {
