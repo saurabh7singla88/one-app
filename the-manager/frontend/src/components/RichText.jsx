@@ -21,9 +21,34 @@ function renderInline(text, keyBase) {
   return parts.length ? parts : [text];
 }
 
+// ── HTML renderer (TipTap-generated content) ──────────────────────────────────
+function RichHtml({ html, sx }) {
+  return (
+    <Box
+      sx={{
+        color: 'text.primary',
+        fontSize: '0.875rem',
+        lineHeight: 1.75,
+        '& p': { m: 0, mb: 0.5 },
+        '& ol, & ul': { pl: '1.4em', m: 0, mb: 0.5 },
+        '& li': { mb: 0.25 },
+        '& li > p': { m: 0 },
+        '& strong': { fontWeight: 700 },
+        '& em': { fontStyle: 'italic' },
+        '& code': { fontFamily: 'monospace', fontSize: '0.82em', bgcolor: 'action.hover', px: 0.5, borderRadius: 0.5 },
+        ...sx,
+      }}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}
+
 // ── Block renderer ─────────────────────────────────────────────────────────────
 export default function RichText({ text = '', sx = {} }) {
   if (!text) return null;
+
+  // TipTap saves HTML; fall through to HTML renderer when detected
+  if (text.trimStart().startsWith('<')) return <RichHtml html={text} sx={sx} />;
 
   const lines = text.split('\n');
   const elements = [];
@@ -79,8 +104,12 @@ export default function RichText({ text = '', sx = {} }) {
   return <Box sx={{ color: 'text.primary', ...sx }}>{elements}</Box>;
 }
 
-// ── Strip markdown for plain-text previews ─────────────────────────────────────
+// ── Strip markup for plain-text previews ──────────────────────────────────────
 export function stripMarkdown(text = '') {
+  if (text.trimStart().startsWith('<')) {
+    // Strip HTML tags and collapse whitespace for a clean preview
+    return text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
   return text
     .replace(/\*\*(.+?)\*\*/g, '$1')
     .replace(/<u>(.*?)<\/u>/gs, '$1')

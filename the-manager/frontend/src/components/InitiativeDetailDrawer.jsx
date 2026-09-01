@@ -2154,11 +2154,11 @@ export default function InitiativeDetailDrawer({ initiativeId, open, onClose, pa
                               <Typography variant="caption" fontWeight={700}>{c.user?.name}</Typography>
                             </Box>
                             <Box sx={{ mb: 1.5 }}>
-                              <RichEditor
-                                autoFocus fullWidth multiline size="small" value={editingCommentText}
-                                onChange={e => setEditingCommentText(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Escape') setEditingCommentId(null); }}
-                                onSubmit={() => handleEditComment(c.id)}
+                              <TipTapEditor
+                                content={editingCommentText}
+                                onChange={v => setEditingCommentText(v)}
+                                placeholder="Edit note…"
+                                minHeight={80}
                               />
                             </Box>
                             <Box display="flex" gap={0.75}>
